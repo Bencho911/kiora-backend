@@ -10,6 +10,7 @@ const swaggerUi = require('swagger-ui-express');
 const logger = require('./config/logger');
 
 const correlationId = require('./middleware/correlationId');
+const authMiddleware = require('./middleware/auth');
 
 const app = express();
 
@@ -32,6 +33,11 @@ const limiter = rateLimit({
     message: { error: 'Too Many Requests', message: 'Límite de peticiones excedido (2000/15min), intenta más tarde.' },
 });
 app.use('/api', limiter);
+
+// ── Autenticación centralizada (JWT) ──────────────────────────────────────
+// Valida el token antes de proxificar a los microservicios.
+// Las rutas públicas se definen en middleware/auth.js → PUBLIC_PREFIXES.
+app.use(authMiddleware);
 
 const swaggerOptions = {
     explorer: true,
