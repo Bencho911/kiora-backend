@@ -92,7 +92,7 @@ const updateProduct = async (req, res, next) => {
     const { id } = req.params;
     const productId = Number(id);
 
-    console.log('[DEBUG] updateProduct:', { id, productId, bodyKeys: Object.keys(req.body), hasFile: !!req.file });
+    logger.debug('updateProduct', { id, productId, bodyKeys: Object.keys(req.body), hasFile: !!req.file });
 
     if (req.body.precio_unitario !== undefined && Number(req.body.precio_unitario) < 0) {
         return res.status(400).json({ error: 'El precio_unitario no puede ser negativo.' });
@@ -114,7 +114,7 @@ const updateProduct = async (req, res, next) => {
 
         const result = await productRepository.update(productId, fields);
         if (result.rows.length === 0) {
-            console.warn('[DEBUG] No rows affected for product:', productId);
+            logger.debug('No rows affected for product', { productId });
             return res.status(404).json({ error: 'Producto no encontrado o ningún campo válido enviado.' });
         }
         logger.info('Producto actualizado', { cod_prod: id });
