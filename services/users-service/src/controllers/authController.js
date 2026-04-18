@@ -8,7 +8,7 @@ const emailService = require('../config/emailService');
 const { client: redisClient } = require('../config/blacklist');
 const logger = require('../config/logger');
 
-const NOTIFICATIONS_CHANNEL = process.env.REDIS_NOTIFICATIONS_CHANNEL || 'kiora:notifications';
+const NOTIFICATIONS_STREAM = process.env.REDIS_NOTIFICATIONS_STREAM || 'kiora:notifications:stream';
 const RESET_CODE_EXPIRY_MINUTES = emailService.RESET_CODE_EXPIRY_MINUTES;
 
 const MAX_INTENTOS = 5;
@@ -365,10 +365,10 @@ const forgotPassword = async (req, res, next) => {
         };
 
         try {
-            await redisClient.publish(NOTIFICATIONS_CHANNEL, JSON.stringify(emailPayload));
+            await redisClient.xadd(NOTIFICATIONS_STREAM, '*', 'payload', JSON.stringify(emailPayload));
         } catch (pubErr) {
-            // Fallback: envío directo si Redis pub/sub falla
-            logger.warn('Redis pub/sub no disponible, enviando email directamente', { error: pubErr.message });
+            // Fallback: envío directo si Redis Streams falla
+            logger.warn('Redis Streams no disponible, enviando email directamente', { error: pubErr.message });
             await emailService.sendPasswordResetCode(correo_usu, code);
         }
 

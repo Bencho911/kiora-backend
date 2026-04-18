@@ -2,6 +2,8 @@
 
 const express = require('express');
 const router  = express.Router();
+const validate = require('../middlewares/validate');
+const { createOrderSchema, updateOrderStatusSchema } = require('../validators/orderValidators');
 const {
     getOrders,
     getOrderById,
@@ -108,7 +110,7 @@ router.get('/:id', getOrderById);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', createOrder);
+router.post('/', validate(createOrderSchema), createOrder);
 
 /**
  * @swagger
@@ -154,7 +156,7 @@ router.post('/', createOrder);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id/status', updateOrderStatus);
+router.put('/:id/status', validate(updateOrderStatusSchema), updateOrderStatus);
 
 /**
  * @swagger

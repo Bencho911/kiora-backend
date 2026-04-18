@@ -58,20 +58,13 @@ const createProduct = async (req, res, next) => {
     const { nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cat, stock_actual, stock_minimo } = req.body;
     const url_imagen = req.file ? req.file.path : null;
 
-    if (!nom_prod || precio_unitario === undefined) {
-        return res.status(400).json({ error: 'nom_prod y precio_unitario son obligatorios.' });
-    }
-    if (Number(precio_unitario) < 0) {
-        return res.status(400).json({ error: 'El precio_unitario no puede ser negativo.' });
-    }
-
     try {
         const result = await productRepository.create({
             nom_prod, 
             descrip_prod: descrip_prod || null, 
             precio_unitario: Number(precio_unitario), 
             fechaven_prod: fechaven_prod || null, 
-            fk_cod_cat: (fk_cod_cat && fk_cod_cat !== "" && fk_cod_cat !== 'null') ? Number(fk_cod_cat) : null, 
+            fk_cod_cat: (fk_cod_cat && fk_cod_cat !== '' && fk_cod_cat !== 'null') ? Number(fk_cod_cat) : null, 
             stock_actual: Number(stock_actual || 0), 
             stock_minimo: Number(stock_minimo || 0),
             url_imagen
@@ -80,7 +73,7 @@ const createProduct = async (req, res, next) => {
         res.status(201).json(result.rows[0]);
     } catch (error) {
         if (error.code === '23503') {
-            return res.status(400).json({ error: `La categoría con id ${fk_cod_cat} no existe.` });
+            return res.status(400).json({ error: `La categoría con id ${fk_cod_cat} no existe.`, code: 'FK_NOT_FOUND' });
         }
         logger.error('Error al crear producto', { error: error.message });
         next(error);
@@ -91,12 +84,6 @@ const createProduct = async (req, res, next) => {
 const updateProduct = async (req, res, next) => {
     const { id } = req.params;
     const productId = Number(id);
-
-    logger.debug('updateProduct', { id, productId, bodyKeys: Object.keys(req.body), hasFile: !!req.file });
-
-    if (req.body.precio_unitario !== undefined && Number(req.body.precio_unitario) < 0) {
-        return res.status(400).json({ error: 'El precio_unitario no puede ser negativo.' });
-    }
 
     try {
         const fields = { ...req.body };
@@ -114,14 +101,13 @@ const updateProduct = async (req, res, next) => {
 
         const result = await productRepository.update(productId, fields);
         if (result.rows.length === 0) {
-            logger.debug('No rows affected for product', { productId });
-            return res.status(404).json({ error: 'Producto no encontrado o ningún campo válido enviado.' });
+            return res.status(404).json({ error: 'Producto no encontrado o ningún campo válido enviado.', code: 'NOT_FOUND' });
         }
         logger.info('Producto actualizado', { cod_prod: id });
         res.status(200).json(result.rows[0]);
     } catch (error) {
         if (error.code === '23503') {
-            return res.status(400).json({ error: `La categoría con id ${req.body.fk_cod_cat} no existe.` });
+            return res.status(400).json({ error: `La categoría con id ${req.body.fk_cod_cat} no existe.`, code: 'FK_NOT_FOUND' });
         }
         logger.error('Error al actualizar producto', { error: error.message });
         next(error);
@@ -148,13 +134,6 @@ const deleteProduct = async (req, res, next) => {
 const updateStock = async (req, res, next) => {
     const { id } = req.params;
     const { cantidad } = req.body;
-
-    if (cantidad === undefined || cantidad === null) {
-        return res.status(400).json({ error: 'cantidad es obligatorio.' });
-    }
-    if (!Number.isInteger(Number(cantidad))) {
-        return res.status(400).json({ error: 'cantidad debe ser un número entero.' });
-    }
 
     try {
         // Pre-validación: verificar que el stock no quede negativo

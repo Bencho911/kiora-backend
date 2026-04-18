@@ -27,6 +27,8 @@ module.exports = {
         port: Number(process.env.REDIS_PORT),
         password: process.env.REDIS_PASSWORD || undefined,
         notificationsChannel: process.env.REDIS_NOTIFICATIONS_CHANNEL || 'kiora:notifications',
+        notificationsStream: process.env.REDIS_NOTIFICATIONS_STREAM || 'kiora:notifications:stream',
+        consumerGroup: process.env.REDIS_CONSUMER_GROUP || 'kiora-notifications-group',
     },
     smtp: {
         host: process.env.SMTP_HOST,

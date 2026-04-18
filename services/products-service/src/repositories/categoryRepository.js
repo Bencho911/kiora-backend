@@ -9,9 +9,9 @@ const db = require('../config/db');
  */
 
 const findAll = ({ limit = 100, offset = 0 } = {}) =>
-    db.query('SELECT * FROM Categoria ORDER BY cod_cat LIMIT $1 OFFSET $2', [limit, offset]);
+    db.query('SELECT * FROM Categoria WHERE activo = true ORDER BY cod_cat LIMIT $1 OFFSET $2', [limit, offset]);
 
-const countAll = () => db.query('SELECT COUNT(*) FROM Categoria');
+const countAll = () => db.query('SELECT COUNT(*) FROM Categoria WHERE activo = true');
 
 const findById = (cod_cat) =>
     db.query('SELECT * FROM Categoria WHERE cod_cat = $1', [cod_cat]);
@@ -43,6 +43,6 @@ const update = (cod_cat, fields) => {
 };
 
 const remove = (cod_cat) =>
-    db.query('DELETE FROM Categoria WHERE cod_cat = $1 RETURNING cod_cat', [cod_cat]);
+    db.query('UPDATE Categoria SET activo = false WHERE cod_cat = $1 AND activo = true RETURNING cod_cat', [cod_cat]);
 
 module.exports = { findAll, countAll, findById, create, update, remove };

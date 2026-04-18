@@ -2,6 +2,13 @@
 
 const express = require('express');
 const router = express.Router();
+const validate = require('../middlewares/validate');
+const {
+    createSupplierSchema,
+    updateSupplierSchema,
+    createMovementSchema,
+    upsertSuministraSchema,
+} = require('../validators/inventoryValidators');
 const {
     getSuppliers,
     getSupplierById,
@@ -91,7 +98,7 @@ router.get('/suppliers/:id', getSupplierById);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/suppliers', createSupplier);
+router.post('/suppliers', validate(createSupplierSchema), createSupplier);
 
 /**
  * @swagger
@@ -126,7 +133,7 @@ router.post('/suppliers', createSupplier);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/suppliers/:id', updateSupplier);
+router.put('/suppliers/:id', validate(updateSupplierSchema), updateSupplier);
 
 /**
  * @swagger
@@ -214,7 +221,7 @@ router.get('/movements', getMovements);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/movements', createMovement);
+router.post('/movements', validate(createMovementSchema), createMovement);
 
 /* ── Suministra (HU14) ────────────────────────────────────────────────────── */
 
@@ -327,6 +334,6 @@ router.get('/suministra/:id', getSuministraById);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/suministra', upsertSuministra);
+router.post('/suministra', validate(upsertSuministraSchema), upsertSuministra);
 
 module.exports = router;

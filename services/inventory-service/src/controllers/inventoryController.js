@@ -64,9 +64,6 @@ const getSupplierById = async (req, res, next) => {
 // POST /api/inventory/suppliers
 const createSupplier = async (req, res, next) => {
     const { nom_prov, id_prov, tel_prov, tipoid_prov } = req.body;
-    if (!nom_prov) {
-        return res.status(400).json({ error: 'nom_prov es obligatorio.' });
-    }
     try {
         const result = await inventoryRepository.createSupplier({ id_prov, nom_prov, tel_prov, tipoid_prov });
         logger.info('Proveedor creado', { cod_prov: result.rows[0].cod_prov });
@@ -141,16 +138,6 @@ const getMovements = async (req, res, next) => {
 // POST /api/inventory/movements
 const createMovement = async (req, res, next) => {
     const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent } = req.body;
-
-    if (!tipo_mov || cantidad === undefined || !cod_prod) {
-        return res.status(400).json({ error: 'tipo_mov, cantidad y cod_prod son obligatorios.' });
-    }
-    if (!['entrada', 'salida', 'ajuste'].includes(tipo_mov)) {
-        return res.status(400).json({ error: "tipo_mov debe ser 'entrada', 'salida' o 'ajuste'." });
-    }
-    if (Number(cantidad) <= 0) {
-        return res.status(400).json({ error: 'cantidad debe ser mayor a 0.' });
-    }
 
     try {
         // 1. Guardar el historial en la tabla Inventario
@@ -267,16 +254,6 @@ const getSuministraById = async (req, res, next) => {
  */
 const upsertSuministra = async (req, res, next) => {
     const { fk_cod_prov, cod_prod, stock, stock_minimo } = req.body;
-
-    if (!fk_cod_prov || !cod_prod) {
-        return res.status(400).json({ error: 'fk_cod_prov y cod_prod son obligatorios.' });
-    }
-    if (Number(stock) < 0) {
-        return res.status(400).json({ error: 'stock no puede ser negativo.' });
-    }
-    if (stock_minimo !== undefined && Number(stock_minimo) < 0) {
-        return res.status(400).json({ error: 'stock_minimo no puede ser negativo.' });
-    }
 
     try {
         const result = await inventoryRepository.upsertSuministra({

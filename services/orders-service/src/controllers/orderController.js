@@ -11,8 +11,6 @@ const outgoingHeaders = (req) => {
     return h;
 };
 
-const VALID_STATES = ['pendiente', 'completada', 'cancelada'];
-
 // GET /api/orders  — lista paginada
 const getOrders = async (req, res, next) => {
     try {
@@ -60,21 +58,7 @@ const createOrder = async (req, res, next) => {
     const id_usu = id_usu_header ? parseInt(id_usu_header, 10) : req.body.id_usu;
 
     if (!id_usu) {
-        return res.status(400).json({ error: 'No se pudo identificar al usuario (id_usu faltante).' });
-    }
-
-    if (!Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: 'items debe ser un array no vacío.' });
-    }
-    for (const item of items) {
-        if (!item.cod_prod || !item.cantidad || item.precio_unit === undefined) {
-            return res.status(400).json({
-                error: 'Cada item requiere: cod_prod, cantidad y precio_unit.',
-            });
-        }
-        if (Number(item.cantidad) <= 0 || Number(item.precio_unit) < 0) {
-            return res.status(400).json({ error: 'cantidad > 0 y precio_unit >= 0.' });
-        }
+        return res.status(400).json({ error: 'No se pudo identificar al usuario (id_usu faltante).', code: 'USER_NOT_IDENTIFIED' });
     }
 
     try {
@@ -92,12 +76,6 @@ const createOrder = async (req, res, next) => {
 const updateOrderStatus = async (req, res, next) => {
     const { estado } = req.body;
     const orderId = req.params.id;
-
-    if (!VALID_STATES.includes(estado)) {
-        return res.status(400).json({
-            error: `estado debe ser uno de: ${VALID_STATES.join(', ')}.`,
-        });
-    }
 
     try {
         // 1. Obtenemos los ítems ANTES de intentar marcar la venta como completada
