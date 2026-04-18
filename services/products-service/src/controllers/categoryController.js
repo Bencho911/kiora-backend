@@ -51,9 +51,6 @@ const getCategoryById = async (req, res, next) => {
 // POST /api/categories
 const createCategory = async (req, res, next) => {
     const { nom_cat, descrip_cat } = req.body;
-    if (!nom_cat) {
-        return res.status(400).json({ error: 'nom_cat es obligatorio.' });
-    }
     try {
         const result = await categoryRepository.create({ nom_cat, descrip_cat });
         logger.info('Categoría creada', { cod_cat: result.rows[0].cod_cat });

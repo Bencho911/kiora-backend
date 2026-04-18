@@ -20,13 +20,14 @@ const findAll = ({ limit = 20, offset = 0 } = {}) =>
                 c.nom_cat
          FROM Producto p
          LEFT JOIN Categoria c ON c.cod_cat = p.fk_cod_cat
+         WHERE p.activo = true
          ORDER BY p.cod_prod
          LIMIT $1 OFFSET $2`,
         [limit, offset]
     );
 
 /** Cuenta total de productos para paginación */
-const countAll = () => db.query('SELECT COUNT(*) FROM Producto');
+const countAll = () => db.query('SELECT COUNT(*) FROM Producto WHERE activo = true');
 
 /**
  * Busca un producto por su PK.
@@ -94,7 +95,7 @@ const updateStock = (cod_prod, cantidad) =>
  */
 const remove = (cod_prod) =>
     db.query(
-        'DELETE FROM Producto WHERE cod_prod = $1 RETURNING cod_prod',
+        'UPDATE Producto SET activo = false WHERE cod_prod = $1 AND activo = true RETURNING cod_prod',
         [cod_prod]
     );
 
@@ -106,7 +107,7 @@ const findLowStock = () =>
         `SELECT p.cod_prod, p.nom_prod, p.stock_actual, p.stock_minimo, c.nom_cat
          FROM Producto p
          LEFT JOIN Categoria c ON c.cod_cat = p.fk_cod_cat
-         WHERE p.stock_actual <= p.stock_minimo
+         WHERE p.stock_actual <= p.stock_minimo AND p.activo = true
          ORDER BY p.cod_prod`
     );
 

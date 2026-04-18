@@ -3,6 +3,8 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../middlewares/uploadMiddleware');
+const validate = require('../middlewares/validate');
+const { createProductSchema, updateProductSchema, updateStockSchema } = require('../validators/productValidators');
 const {
     getProducts,
     getProductById,
@@ -98,7 +100,7 @@ router.get('/:id', getProductById);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', upload.single('imagen'), createProduct);
+router.post('/', upload.single('imagen'), validate(createProductSchema), createProduct);
 
 /**
  * @swagger
@@ -133,7 +135,7 @@ router.post('/', upload.single('imagen'), createProduct);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id', upload.single('imagen'), updateProduct);
+router.put('/:id', upload.single('imagen'), validate(updateProductSchema), updateProduct);
 
 /**
  * @swagger
@@ -226,6 +228,6 @@ router.delete('/:id', deleteProduct);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id/stock', updateStock);
+router.put('/:id/stock', validate(updateStockSchema), updateStock);
 
 module.exports = router;

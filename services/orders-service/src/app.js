@@ -42,7 +42,11 @@ app.use('/api/orders',          require('./routes/orderRoutes'));
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
     logger.error('Error no controlado', { message: err.message, stack: err.stack });
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(err.status || 500).json({
+        error: err.status ? err.message : 'Error interno del servidor.',
+        code: 'INTERNAL_ERROR',
+        details: process.env.NODE_ENV === 'development' ? { stack: err.stack } : undefined,
+    });
 });
 
 module.exports = app;

@@ -2,6 +2,8 @@
 
 const express = require('express');
 const router = express.Router();
+const validate = require('../middlewares/validate');
+const { createCategorySchema, updateCategorySchema } = require('../validators/categoryValidators');
 const {
     getCategories,
     getCategoryById,
@@ -83,7 +85,7 @@ router.get('/:id', getCategoryById);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', createCategory);
+router.post('/', validate(createCategorySchema), createCategory);
 
 /**
  * @swagger
@@ -118,7 +120,7 @@ router.post('/', createCategory);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id', updateCategory);
+router.put('/:id', validate(updateCategorySchema), updateCategory);
 
 /**
  * @swagger
