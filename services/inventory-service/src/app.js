@@ -43,6 +43,7 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 
 // ── Rutas ─────────────────────────────────────────────────────────────────
+app.use('/api/inventory/saga', require('./routes/reservationRoutes'));
 app.use('/api/inventory', require('./routes/inventoryRoutes'));
 
 // eslint-disable-next-line no-unused-vars

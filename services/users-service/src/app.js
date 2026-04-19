@@ -8,6 +8,7 @@ const pool = require('./config/db');
 const blacklist = require('./config/blacklist');
 const logger = require('./config/logger');
 const authRoutes = require('./routes/authRoutes');
+const incidentsRoutes = require('./routes/incidentsRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 /**
@@ -61,6 +62,7 @@ app.get('/api/users/docs-json', (req, res) => res.json(swaggerSpec));
 
 // ── Rutas ──────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+app.use('/api/incidents', incidentsRoutes);
 
 // ── Manejo centralizado de errores (SIEMPRE al final) ──────────────────────
 app.use(errorHandler);

@@ -12,6 +12,16 @@ const app = express();
 
 app.use(helmet());
 app.use(cors({ origin: env.corsOrigin, credentials: true }));
+
+// ── Webhooks de Stripe (Debe capturar el raw buffer antes de procesar JSON) ──
+const { handleStripeWebhook } = require('./controllers/paymentController');
+app.post(
+    '/api/orders/checkout/webhook',
+    express.raw({ type: 'application/json' }),
+    handleStripeWebhook
+);
+
+// Body parser global para el resto de rutas
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'orders-service' }));
@@ -45,6 +55,7 @@ app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 // ── Rutas ─────────────────────────────────────────────────────────────────
 // IMPORTANTE: invoices debe ir ANTES de /:id para evitar conflicto de rutas
 app.use('/api/orders/invoices', require('./routes/invoiceRoutes'));
+app.use('/api/orders/checkout', require('./routes/paymentRoutes'));
 app.use('/api/orders',          require('./routes/orderRoutes'));
 
 // eslint-disable-next-line no-unused-vars

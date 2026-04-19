@@ -6,6 +6,7 @@ require('./config/tracing');
 const env    = require('./config/env');
 const logger = require('./config/logger');
 const app    = require('./app');
+require('./jobs/expirationJob');
 
 const server = app.listen(env.port, () => {
     logger.info(`products-service corriendo en el puerto ${env.port}`, {
