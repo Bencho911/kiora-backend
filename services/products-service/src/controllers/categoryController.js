@@ -1,6 +1,7 @@
 'use strict';
 
 const categoryRepository = require('../repositories/categoryRepository');
+const parsePagination = require('../utils/parsePagination');
 const logger = require('../config/logger');
 
 /**
@@ -11,9 +12,7 @@ const logger = require('../config/logger');
 // GET /api/categories
 const getCategories = async (req, res, next) => {
     try {
-        const page   = Math.max(1, parseInt(req.query.page  || 1, 10));
-        const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit || 100, 10)));
-        const offset = (page - 1) * limit;
+        const { page, limit, offset } = parsePagination(req.query, { defaultLimit: 100 });
         const [rows, count] = await Promise.all([
             categoryRepository.findAll({ limit, offset }),
             categoryRepository.countAll(),

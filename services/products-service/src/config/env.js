@@ -31,6 +31,12 @@ module.exports = {
         port: Number(process.env.DB_PORT),
         name: process.env.DB_NAME,
     },
+    redis: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: Number(process.env.REDIS_PORT) || 6379,
+        password: process.env.REDIS_PASSWORD || undefined,
+        cacheTtl: parseInt(process.env.CACHE_TTL_SECONDS, 10) || 300, // 5 minutos
+    },
     corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
     nodeEnv: process.env.NODE_ENV || 'development',
 };

@@ -21,14 +21,14 @@ const pool = new Pool(
 const seedUsers = [
     {
         nom_usu: process.env.SEED_ADMIN_NAME || 'Admin Kiora',
-        correo_usu: process.env.SEED_ADMIN_EMAIL || 'admin@kiora.local',
+        correo_usu: process.env.SEED_ADMIN_EMAIL || 'admin@kiora.com',
         password: process.env.SEED_ADMIN_PASSWORD,
         rol_usu: 'admin',
         tel_usu: process.env.SEED_ADMIN_PHONE || null,
     },
     {
         nom_usu: process.env.SEED_SUPPORT_NAME || 'Soporte Kiora',
-        correo_usu: process.env.SEED_SUPPORT_EMAIL || 'soporte@kiora.local',
+        correo_usu: process.env.SEED_SUPPORT_EMAIL || 'soporte@kiora.com',
         password: process.env.SEED_SUPPORT_PASSWORD,
         rol_usu: 'admin',
         tel_usu: process.env.SEED_SUPPORT_PHONE || null,

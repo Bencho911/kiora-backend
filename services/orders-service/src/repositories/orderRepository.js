@@ -80,6 +80,22 @@ const createWithItems = async ({ id_usu, metodopago_usu, items }) => {
 };
 
 /**
+ * Inserta un evento en la tabla outbox_events.
+ * Diseñado para llamarse dentro de una transacción existente o de forma standalone.
+ *
+ * @param {string} eventType — Tipo de evento (ej: 'inventory.movement')
+ * @param {object} payload — Datos del evento
+ * @param {object} [client] — Cliente PG de una transacción activa (opcional)
+ */
+const insertOutboxEvent = async (eventType, payload, client) => {
+    const conn = client || db;
+    return conn.query(
+        `INSERT INTO outbox_events (event_type, payload) VALUES ($1, $2) RETURNING *`,
+        [eventType, JSON.stringify(payload)]
+    );
+};
+
+/**
  * Cambia el estado de una venta.
  * @param {number} id_vent
  * @param {string} estado — 'pendiente' | 'completada' | 'cancelada'
@@ -99,6 +115,7 @@ module.exports = {
     findById,
     findByIdWithItems,
     createWithItems,
+    insertOutboxEvent,
     updateStatus,
     remove,
 };

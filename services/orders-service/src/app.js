@@ -16,6 +16,14 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'orders-service' }));
 
+// ── Métricas (Prometheus) ─────────────────────────────────────────────────
+const promClient = require('prom-client');
+promClient.collectDefaultMetrics({ prefix: 'orders_' });
+app.get('/metrics', async (_req, res) => {
+    res.set('Content-Type', promClient.register.contentType);
+    res.end(await promClient.register.metrics());
+});
+
 // ── Readiness (verifica conectividad con PostgreSQL) ──────────────────────
 const db = require('./config/db');
 app.get('/health/ready', async (_req, res) => {

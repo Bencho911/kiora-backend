@@ -1,6 +1,7 @@
 'use strict';
 
 process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-for-smoke-tests';
 
 const request = require('supertest');
 const app = require('../app');
