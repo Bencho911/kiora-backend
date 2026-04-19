@@ -108,6 +108,7 @@ const services = {
     inventory: process.env.INVENTORY_SERVICE_URL || 'http://localhost:3003',
     orders: process.env.ORDERS_SERVICE_URL || 'http://localhost:3004',
     notifications: process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:3005',
+    reports: process.env.REPORTS_SERVICE_URL || 'http://localhost:3006',
 };
 
 // ── Swagger docs proxy ───────────────────────────────────────────────────
@@ -177,6 +178,7 @@ app.use('/api/v1/inventory', v1Proxy('inventory-service', services.inventory, '/
 app.use('/api/v1/orders', v1Proxy('orders-service', services.orders, '/orders'));
 app.use('/api/v1/invoices', v1Proxy('orders-service', services.orders, '/invoices'));
 app.use('/api/v1/notifications', v1Proxy('notifications-service', services.notifications, '/notifications'));
+app.use('/api/v1/reports', v1Proxy('reports-service', services.reports, '/reports'));
 
 // ── Legacy routes (/api/*) — backwards compatible, with deprecation header ─
 app.use('/api/users', transparentProxy('users-service', services.users));
@@ -187,6 +189,7 @@ app.use('/api/inventory', transparentProxy('inventory-service', services.invento
 app.use('/api/orders', transparentProxy('orders-service', services.orders));
 app.use('/api/invoices', transparentProxy('orders-service', services.orders));
 app.use('/api/notifications', transparentProxy('notifications-service', services.notifications));
+app.use('/api/reports', transparentProxy('reports-service', services.reports));
 
 // ── Health checks ─────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
@@ -207,6 +210,7 @@ const serviceHealthPaths = {
     inventory: `${services.inventory}/health`,
     orders: `${services.orders}/health`,
     notifications: `${services.notifications}/health`,
+    reports: `${services.reports}/api/reports/health`,
 };
 
 app.get('/health/all', async (_req, res) => {

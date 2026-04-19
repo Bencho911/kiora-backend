@@ -139,6 +139,7 @@ services:
       - inventory-service
       - orders-service
       - notifications-service
+      - reports-service
 
   users-service:
     build:
@@ -243,6 +244,19 @@ services:
     depends_on:
       kiora-redis:
         condition: service_healthy
+
+  reports-service:
+    build:
+      context: ./services/reports-service
+      dockerfile: Dockerfile
+    container_name: kiora_reports_service
+    restart: unless-stopped
+    ports:
+      - "3006:3006"
+    env_file:
+      - ./services/reports-service/.env.docker
+    depends_on:
+      - orders-service
 
   # ─────────────────────────────────────────────
   # OBSERVABILIDAD
