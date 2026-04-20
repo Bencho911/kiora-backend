@@ -96,6 +96,7 @@ const swaggerOptions = {
             { url: '/api/docs.json?svc=products', name: 'Products Service' },
             { url: '/api/docs.json?svc=inventory', name: 'Inventory Service' },
             { url: '/api/docs.json?svc=orders', name: 'Orders Service' },
+            { url: '/api/docs.json?svc=reports', name: 'Reports Service' },
         ],
     },
 };

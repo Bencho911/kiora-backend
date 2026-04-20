@@ -1,7 +1,7 @@
 # Kiora — Notifications Service
 
-Microservicio dedicado exclusivamente al envío de notificaciones (emails, alertas, etc.) del ecosistema Kiora.
-Es un servicio desprovisto de Base de Datos relacional propia. Consiste en un **Subscriber de Redis (Pub/Sub)** y un servidor HTTP para health-checks. Construido con **Node.js**, **Express** y **Nodemailer**.
+Microservicio dedicado exclusivamente al envío de notificaciones proactivas (emails, alertas automáticas, etc.) del ecosistema Kiora.
+Es un servicio desprovisto de Base de Datos relacional propia. Consiste en un **Consumer Group de Redis Streams** y un servidor HTTP para health-checks. Construido con **Node.js**, **Express** y **Nodemailer**.
 
 ---
 
@@ -64,21 +64,23 @@ npm start     # Producción
 
 ---
 
-## Arquitectura de Pub/Sub
+## Arquitectura de Redis Streams
 
-El servicio escucha ininterrumpidamente un canal en Redis (configurado en la variable `REDIS_NOTIFICATIONS_CHANNEL`, por defecto `kiora:notifications`).
+El servicio escucha ininterrumpidamente un **Stream** en Redis (`REDIS_NOTIFICATIONS_STREAM`, por defecto `notifications_stream`) utilizando *Consumer Groups* (`XREADGROUP`). Esto garantiza que los correos se envíen una sola vez y que ningún mensaje se pierda si el servicio cae (persistencia de pending entries sin ACK).
 
-Para emitir un email desde cualquier otro microservicio, se debe inyectar el payload publicándolo explícitamente como string JSON a ese canal en Redis.
+Para emitir un email desde cualquier otro microservicio (ej. `inventory-service` alertando por bajo stock, o `products-service` por caducidad), se debe inyectar el payload añadiéndolo al stream a través de `XADD`.
 
 ### Ejemplo de payload esperado:
 ```javascript
 // Desde users-service, orders-service...
-redisClient.publish('kiora:notifications', JSON.stringify({
-    to: "usuario@kiora.com",
-    subject: "Bienvenido a Kiora!",
-    html: "<h1>Hola mundo</h1><p>Has sido registrado en el sistema.</p>",
-    text: "Hola mundo. Has sido registrado en el sistema." // Opcional
-}));
+await redisClient.xadd(
+    'notifications_stream', '*',
+    'payload', JSON.stringify({
+        to: "usuario@kiora.com",
+        subject: "Alerta de Stock en Kiora!",
+        html: "<h1>Bajo Stock Registrado</h1><p>Reabastecer a la brevedad.</p>"
+    })
+);
 ```
 
-Si el servidor de correos (SMTP) falla, el error es capturado por Winston Logger y se deja registro para monitorización.
+Si el servidor de correos (SMTP) falla, el error es capturado por Winston Logger y el mensaje no recibe el `ACK` en Redis, lo que permite reintentar el envío cuando el servicio se reconecte.
