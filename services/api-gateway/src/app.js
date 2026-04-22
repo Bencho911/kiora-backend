@@ -180,6 +180,7 @@ app.use('/api/v1/orders', v1Proxy('orders-service', services.orders, '/orders'))
 app.use('/api/v1/invoices', v1Proxy('orders-service', services.orders, '/invoices'));
 app.use('/api/v1/notifications', v1Proxy('notifications-service', services.notifications, '/notifications'));
 app.use('/api/v1/reports', v1Proxy('reports-service', services.reports, '/reports'));
+app.use('/api/v1/incidents', v1Proxy('users-service', services.users, '/incidents'));
 
 // ── Legacy routes (/api/*) — backwards compatible, with deprecation header ─
 app.use('/api/users', transparentProxy('users-service', services.users));
@@ -191,6 +192,7 @@ app.use('/api/orders', transparentProxy('orders-service', services.orders));
 app.use('/api/invoices', transparentProxy('orders-service', services.orders));
 app.use('/api/notifications', transparentProxy('notifications-service', services.notifications));
 app.use('/api/reports', transparentProxy('reports-service', services.reports));
+app.use('/api/incidents', transparentProxy('users-service', services.users));
 
 // ── Health checks ─────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {

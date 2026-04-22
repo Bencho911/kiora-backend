@@ -10,6 +10,8 @@ const createSupplierSchema = Joi.object({
     id_prov: Joi.string().max(50).allow('', null).optional(),
     tel_prov: Joi.string().max(20).allow('', null).optional(),
     tipoid_prov: Joi.string().max(20).allow('', null).optional(),
+    correo_prov: Joi.string().max(100).allow('', null).optional(),
+    dir_prov: Joi.string().max(200).allow('', null).optional(),
 });
 
 const updateSupplierSchema = Joi.object({
@@ -19,6 +21,8 @@ const updateSupplierSchema = Joi.object({
     id_prov: Joi.string().max(50).allow('', null),
     tel_prov: Joi.string().max(20).allow('', null),
     tipoid_prov: Joi.string().max(20).allow('', null),
+    correo_prov: Joi.string().max(100).allow('', null),
+    dir_prov: Joi.string().max(200).allow('', null),
 }).min(1).messages({
     'object.min': 'Debes enviar al menos un campo para actualizar.',
 });
@@ -39,6 +43,10 @@ const createMovementSchema = Joi.object({
     fecha_mov: Joi.date().iso().allow(null).optional(),
     fk_cod_prov: Joi.number().integer().allow(null).optional(),
     fk_id_vent: Joi.number().integer().allow(null).optional(),
+    desc_mov: Joi.string().max(255).required().messages({
+        'any.required': 'La justificación (desc_mov) es obligatoria.',
+        'string.empty': 'La justificación no puede estar vacía.',
+    }),
 });
 
 const upsertSuministraSchema = Joi.object({

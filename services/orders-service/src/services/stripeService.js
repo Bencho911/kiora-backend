@@ -1,7 +1,20 @@
 'use strict';
 
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const logger = require('../config/logger');
+
+/**
+ * Lazy init: evita crash al importar si STRIPE_SECRET_KEY no está definido (ej: tests).
+ */
+let _stripe = null;
+function getStripe() {
+    if (!_stripe) {
+        if (!process.env.STRIPE_SECRET_KEY) {
+            throw new Error('STRIPE_SECRET_KEY no está definido en las variables de entorno.');
+        }
+        _stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    }
+    return _stripe;
+}
 
 /**
  * Crea una sesión de Checkout de Stripe para una orden.
@@ -12,7 +25,7 @@ const logger = require('../config/logger');
  */
 const createCheckoutSession = async (order, items) => {
     try {
-        const session = await stripe.checkout.sessions.create({
+        const session = await getStripe().checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: items.map((item) => ({
                 price_data: {
@@ -25,8 +38,8 @@ const createCheckoutSession = async (order, items) => {
                 quantity: item.cantidad,
             })),
             mode: 'payment',
-            success_url: 'http://localhost:5173/kiosk/success?order_id=' + order.id_vent,
-            cancel_url: 'http://localhost:5173/kiosk/cancel?order_id=' + order.id_vent,
+            success_url: 'http://localhost:5173/payment-success?order_id=' + order.id_vent,
+            cancel_url: 'http://localhost:5173/payment-cancel?order_id=' + order.id_vent,
             client_reference_id: String(order.id_vent),
             metadata: {
                 order_id: String(order.id_vent),
@@ -50,7 +63,7 @@ const createCheckoutSession = async (order, items) => {
 const verifyWebhookSignature = (rawBody, signature) => {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     try {
-        return stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+        return getStripe().webhooks.constructEvent(rawBody, signature, webhookSecret);
     } catch (error) {
         logger.error('Error verificando firma de webhook Stripe:', { error: error.message });
         throw new Error('Firma de Stripe inválida');

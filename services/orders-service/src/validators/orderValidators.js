@@ -26,9 +26,9 @@ const createOrderSchema = Joi.object({
 });
 
 const updateOrderStatusSchema = Joi.object({
-    estado: Joi.string().valid('pendiente', 'completada', 'cancelada').required().messages({
+    estado: Joi.string().valid('pendiente', 'completada', 'cancelada', 'reembolsada').required().messages({
         'any.required': 'estado es obligatorio.',
-        'any.only': "estado debe ser uno de: pendiente, completada, cancelada.",
+        'any.only': "estado debe ser uno de: pendiente, completada, cancelada, reembolsada.",
     }),
 });
 

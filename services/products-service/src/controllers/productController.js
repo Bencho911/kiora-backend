@@ -63,8 +63,19 @@ const getProductById = async (req, res, next) => {
 
 // POST /api/products  (HU10)
 const createProduct = async (req, res, next) => {
-    const { nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cat, stock_actual, stock_minimo } = req.body;
+    const { nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo } = req.body;
     const url_imagen = req.file ? req.file.path : null;
+
+    let parsedCats = [];
+    if (fk_cod_cats) {
+        try {
+            parsedCats = typeof fk_cod_cats === 'string' ? JSON.parse(fk_cod_cats) : fk_cod_cats;
+            if (!Array.isArray(parsedCats)) parsedCats = [Number(parsedCats)];
+            else parsedCats = parsedCats.map(Number);
+        } catch (e) {
+            parsedCats = Array.isArray(fk_cod_cats) ? fk_cod_cats.map(Number) : [Number(fk_cod_cats)];
+        }
+    }
 
     try {
         const result = await productRepository.create({
@@ -72,7 +83,7 @@ const createProduct = async (req, res, next) => {
             descrip_prod: descrip_prod || null, 
             precio_unitario: Number(precio_unitario), 
             fechaven_prod: fechaven_prod || null, 
-            fk_cod_cat: (fk_cod_cat && fk_cod_cat !== '' && fk_cod_cat !== 'null') ? Number(fk_cod_cat) : null, 
+            fk_cod_cats: parsedCats, 
             stock_actual: Number(stock_actual || 0), 
             stock_minimo: Number(stock_minimo || 0),
             url_imagen
@@ -85,7 +96,7 @@ const createProduct = async (req, res, next) => {
         res.status(201).json(result.rows[0]);
     } catch (error) {
         if (error.code === '23503') {
-            return res.status(400).json({ error: `La categoría con id ${fk_cod_cat} no existe.`, code: 'FK_NOT_FOUND' });
+            return res.status(400).json({ error: `Una de las categorías proporcionadas no existe.`, code: 'FK_NOT_FOUND' });
         }
         logger.error('Error al crear producto', { error: error.message });
         next(error);
@@ -105,9 +116,18 @@ const updateProduct = async (req, res, next) => {
         }
 
         if (fields.precio_unitario !== undefined) fields.precio_unitario = Number(fields.precio_unitario);
-        if (fields.fk_cod_cat !== undefined) fields.fk_cod_cat = Number(fields.fk_cod_cat);
         if (fields.stock_actual !== undefined) fields.stock_actual = Number(fields.stock_actual);
         if (fields.stock_minimo !== undefined) fields.stock_minimo = Number(fields.stock_minimo);
+
+        if (fields.fk_cod_cats) {
+            try {
+                fields.fk_cod_cats = typeof fields.fk_cod_cats === 'string' ? JSON.parse(fields.fk_cod_cats) : fields.fk_cod_cats;
+                if (!Array.isArray(fields.fk_cod_cats)) fields.fk_cod_cats = [Number(fields.fk_cod_cats)];
+                else fields.fk_cod_cats = fields.fk_cod_cats.map(Number);
+            } catch (e) {
+                fields.fk_cod_cats = Array.isArray(fields.fk_cod_cats) ? fields.fk_cod_cats.map(Number) : [Number(fields.fk_cod_cats)];
+            }
+        }
 
         const result = await productRepository.update(productId, fields);
         if (result.rows.length === 0) {
@@ -121,7 +141,7 @@ const updateProduct = async (req, res, next) => {
         res.status(200).json(result.rows[0]);
     } catch (error) {
         if (error.code === '23503') {
-            return res.status(400).json({ error: `La categoría con id ${req.body.fk_cod_cat} no existe.`, code: 'FK_NOT_FOUND' });
+            return res.status(400).json({ error: `Una de las categorías proporcionadas no existe.`, code: 'FK_NOT_FOUND' });
         }
         logger.error('Error al actualizar producto', { error: error.message });
         next(error);

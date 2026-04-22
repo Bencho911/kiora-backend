@@ -3,7 +3,7 @@ FROM node:20-alpine AS base
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm install --omit=dev && npm cache clean --force
 
 # ── Etapa final ────────────────────────────────────────────────────────────
 FROM node:20-alpine

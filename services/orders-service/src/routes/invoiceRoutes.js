@@ -6,7 +6,7 @@ const { getInvoices, getInvoiceById, createInvoice } = require('../controllers/i
 
 /**
  * @swagger
- * /api/orders/invoices:
+ * /api/invoices:
  *   get:
  *     summary: Listar facturas (paginado)
  *     tags: [Facturas]
@@ -35,7 +35,7 @@ router.get('/', getInvoices);
 
 /**
  * @swagger
- * /api/orders/invoices/{id}:
+ * /api/invoices/{id}:
  *   get:
  *     summary: Detalle de factura
  *     tags: [Facturas]
@@ -63,7 +63,7 @@ router.get('/:id', getInvoiceById);
 
 /**
  * @swagger
- * /api/orders/invoices:
+ * /api/invoices:
  *   post:
  *     summary: Emitir factura para una venta
  *     tags: [Facturas]
