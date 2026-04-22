@@ -44,7 +44,8 @@ const inventoryBreaker = createCircuitBreaker(
  * @param {{ metodopago_usu?: string, items: Array }} data
  */
 async function createOrder(data) {
-    const order = await orderRepository.createWithItems(data);
+    const KIOSKO_USER_ID = Number(process.env.KIOSKO_USER_ID || 1);
+    const order = await orderRepository.createWithItems({ ...data, id_usu: KIOSKO_USER_ID });
     logger.info('Venta creada', { id_vent: order.id_vent });
     return order;
 }

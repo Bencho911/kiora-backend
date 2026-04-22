@@ -45,7 +45,7 @@ const findByIdWithItems = async (id_vent) => {
  * Crea una venta con sus líneas en una sola transacción.
  * @param {{ metodopago_usu, items: Array<{cod_prod, cantidad, precio_unit}> }} data
  */
-const createWithItems = async ({ metodopago_usu, items }) => {
+const createWithItems = async ({ metodopago_usu, items, id_usu }) => {
     const client = await db.connect();
     try {
         await client.query('BEGIN');
@@ -57,9 +57,9 @@ const createWithItems = async ({ metodopago_usu, items }) => {
         const precio_prod_final = items.length > 0 ? Number(items[0].precio_unit) : 0;
 
         const ventaRes = await client.query(
-            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, estado)
-             VALUES ($1, $2, $3, 'pendiente') RETURNING *`,
-            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null]
+            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, fk_id_usu, estado)
+             VALUES ($1, $2, $3, $4, 'pendiente') RETURNING *`,
+            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null, id_usu || null]
         );
         const venta = ventaRes.rows[0];
 

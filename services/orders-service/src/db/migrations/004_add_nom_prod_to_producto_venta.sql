@@ -1,4 +1,4 @@
--- Migration: 002_add_nom_prod_to_producto_venta
+-- Migration: 004_add_nom_prod_to_producto_venta
 -- Dominio: orders-service
 -- Agrega columna nom_prod a Producto_Venta para desnormalizar y facilitar historial.
 

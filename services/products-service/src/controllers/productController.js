@@ -96,7 +96,7 @@ const createProduct = async (req, res, next) => {
         res.status(201).json(result.rows[0]);
     } catch (error) {
         if (error.code === '23503') {
-            return res.status(400).json({ error: `La categoría con id ${fk_cod_cat} no existe.`, code: 'FK_NOT_FOUND' });
+            return res.status(400).json({ error: `Una de las categorías proporcionadas no existe.`, code: 'FK_NOT_FOUND' });
         }
         logger.error('Error al crear producto', { error: error.message });
         next(error);
@@ -116,7 +116,6 @@ const updateProduct = async (req, res, next) => {
         }
 
         if (fields.precio_unitario !== undefined) fields.precio_unitario = Number(fields.precio_unitario);
-        if (fields.fk_cod_cat !== undefined) fields.fk_cod_cat = Number(fields.fk_cod_cat);
         if (fields.stock_actual !== undefined) fields.stock_actual = Number(fields.stock_actual);
         if (fields.stock_minimo !== undefined) fields.stock_minimo = Number(fields.stock_minimo);
 
@@ -142,7 +141,7 @@ const updateProduct = async (req, res, next) => {
         res.status(200).json(result.rows[0]);
     } catch (error) {
         if (error.code === '23503') {
-            return res.status(400).json({ error: `La categoría con id ${req.body.fk_cod_cat} no existe.`, code: 'FK_NOT_FOUND' });
+            return res.status(400).json({ error: `Una de las categorías proporcionadas no existe.`, code: 'FK_NOT_FOUND' });
         }
         logger.error('Error al actualizar producto', { error: error.message });
         next(error);

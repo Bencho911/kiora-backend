@@ -1,7 +1,7 @@
 {
   "name": "reports-service",
   "version": "1.0.0",
-  "description": "Microservicio de reportes y generación de PDFs — Kiora",
+  "description": "Servicio de reportes y facturas en PDF para Kiora",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -13,6 +13,8 @@
     "express": "^4.19.2",
     "helmet": "^7.1.0",
     "pdfkit": "^0.15.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "winston": "^3.13.0"
   },
   "devDependencies": {

@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
+const logger = require('../config/logger');
 require('../config/env');
 
 if (process.env.NODE_ENV === 'production') {
@@ -50,7 +51,7 @@ async function upsertUser(user) {
         [user.correo_usu]
     );
     if (existing.rows.length > 0) {
-        console.log(`Usuario ya existente, se omite: ${user.correo_usu}`);
+        logger.info(`Usuario ya existente, se omite: ${user.correo_usu}`);
         return;
     }
 
@@ -60,19 +61,19 @@ async function upsertUser(user) {
          VALUES ($1, $2, $3, $4, $5)`,
         [user.nom_usu, user.correo_usu, hashedPassword, user.rol_usu, user.tel_usu]
     );
-    console.log(`Usuario seed creado: ${user.correo_usu}`);
+    logger.info(`Usuario seed creado: ${user.correo_usu}`);
 }
 
 async function seed() {
     try {
         validateSeedPasswords();
-        console.log('Iniciando seed de usuarios en entorno no productivo...');
+        logger.info('Iniciando seed de usuarios en entorno no productivo...');
         for (const user of seedUsers) {
             await upsertUser(user);
         }
-        console.log('Seed completado.');
+        logger.info('Seed completado.');
     } catch (error) {
-        console.error('Error durante el seed:', error.message);
+        logger.error('Error durante el seed:', { error: error.message });
         process.exitCode = 1;
     } finally {
         await pool.end();

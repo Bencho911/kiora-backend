@@ -43,11 +43,13 @@ const productsBreaker = createCircuitBreaker(
 /**
  * Registra un movimiento y sincroniza con Suministra y ProductsService.
  * @param {Object} movementData 
- * @param {string} userEmail - El correo del usuario para la notificación
  * @param {Object} reqHeaders - Encabezados originales para propagar
  */
-async function registerMovement(movementData, userEmail, reqHeaders) {
+async function registerMovement(movementData, reqHeaders) {
     const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov } = movementData;
+
+    // Delta único: se usa tanto para Suministra como para products-service
+    const stockDelta = tipo_mov === 'entrada' ? Number(cantidad) : -Number(cantidad);
 
     // 1. Guardar historial en tabla Inventario
     const result = await inventoryRepository.createMovement({
@@ -56,24 +58,21 @@ async function registerMovement(movementData, userEmail, reqHeaders) {
     const movement = result.rows[0];
     logger.info('Movimiento registrado', { id_mov: movement.id_mov, tipo_mov, cod_prod });
 
+    // 2. Actualizar stock en Suministra + verificar alertas
     try {
-        const delta = tipo_mov === 'entrada' ? Number(cantidad) : -Number(cantidad);
-        const stockRes = await inventoryRepository.updateStock(cod_prod, delta, fk_cod_prov);
+        const stockRes = await inventoryRepository.updateStock(cod_prod, stockDelta, fk_cod_prov);
         
-        // --- NUEVO: Verificar bajo stock para enviar Gmail ---
         if (stockRes && stockRes.rows.length > 0) {
             const row = stockRes.rows[0];
             if (row.stock < row.stock_minimo) {
-                logger.warn('Stock bajo detectado. Enviando alerta Gmail...', { cod_prod, stock: row.stock });
+                logger.warn('Stock bajo detectado. Enviando alerta...', { cod_prod, stock: row.stock });
                 
-                // Intento 1: Envío directo (Plan B de Usuarios - El más fiable)
                 await directEmailService.sendLowStockEmail({
                     cod_prod,
                     stock_actual: row.stock,
                     stock_minimo: row.stock_minimo
-                }, userEmail);
+                }, null); // Usa ALERT_EMAIL / ADMIN_EMAIL del .env
 
-                // Intento 2: Redis (Para la campana del sistema)
                 await redisService.emitLowStockAlert({
                     cod_prod,
                     stock_actual: row.stock,
@@ -85,33 +84,29 @@ async function registerMovement(movementData, userEmail, reqHeaders) {
         logger.error('Error sincronizando con Suministra o enviando alerta', { error: err.message });
     }
 
-    // 2. Sincronización reactiva con products-service vía circuit breaker
-    const stockDelta = tipo_mov === 'entrada' ? Number(cantidad) : -Number(cantidad);
+    // 3. Sincronización reactiva con products-service vía circuit breaker
     const headers = outgoingHeaders(reqHeaders);
-
     const MAX_RETRIES = 3;
     let synced = false;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-            const stockRes = await productsBreaker.fire(
+            const syncRes = await productsBreaker.fire(
                 `${env.productsServiceUrl}/api/products/${cod_prod}/stock`,
                 { cantidad: stockDelta },
                 headers
             );
-            const stockData = await stockRes.json();
+            const stockData = await syncRes.json();
             logger.info('Stock sincronizado con products-service', {
                 cod_prod, stock_actual: stockData.stock_actual, attempt,
             });
             synced = true;
             break;
         } catch (err) {
-            // Si es 409 (stock insuficiente) es error de negocio, no reintentar
             if (err.status === 409) {
                 logger.warn('Stock insuficiente en products-service', { cod_prod });
                 break;
             }
-            // Si el circuit breaker está abierto, no reintentar
             if (err.code === 'CIRCUIT_OPEN') {
                 logger.error('Circuit breaker abierto, no se puede sincronizar stock', { cod_prod });
                 break;

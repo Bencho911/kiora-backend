@@ -24,11 +24,12 @@ const createSupplier = ({ id_prov, nom_prov, tel_prov, tipoid_prov, correo_prov,
     );
 
 const updateSupplier = (id, fields) => {
-    const keys = Object.keys(fields).filter(k => fields[k] !== undefined);
-    if (keys.length === 0) return null;
+    const allowed = ['nom_prov', 'id_prov', 'tel_prov', 'tipoid_prov', 'correo_prov', 'dir_prov'];
+    const entries = Object.entries(fields).filter(([key]) => allowed.includes(key));
+    if (entries.length === 0) return Promise.resolve({ rows: [] });
 
-    const setClause = keys.map((k, i) => `${k} = $${i + 2}`).join(', ');
-    const values = keys.map(k => fields[k]);
+    const setClause = entries.map(([key], i) => `${key} = $${i + 2}`).join(', ');
+    const values = entries.map(([, val]) => val);
 
     return db.query(
         `UPDATE Proveedor SET ${setClause} WHERE cod_prov = $1 RETURNING *`,
