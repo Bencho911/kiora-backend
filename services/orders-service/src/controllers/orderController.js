@@ -49,15 +49,9 @@ const getOrderById = async (req, res, next) => {
 // POST /api/orders
 const createOrder = async (req, res, next) => {
     const { metodopago_usu, items } = req.body;
-    const id_usu_header = req.headers['x-user-id'];
-    const id_usu = id_usu_header ? parseInt(id_usu_header, 10) : req.body.id_usu;
-
-    if (!id_usu) {
-        return res.status(400).json({ error: 'No se pudo identificar al usuario (id_usu faltante).', code: 'USER_NOT_IDENTIFIED' });
-    }
 
     try {
-        const order = await orderService.createOrder({ id_usu, metodopago_usu, items });
+        const order = await orderService.createOrder({ metodopago_usu, items });
         res.status(201).json(order);
     } catch (error) {
         logger.error('Error al crear venta', { error: error.message });

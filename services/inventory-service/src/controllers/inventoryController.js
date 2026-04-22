@@ -53,9 +53,9 @@ const getSupplierById = async (req, res, next) => {
 
 // POST /api/inventory/suppliers
 const createSupplier = async (req, res, next) => {
-    const { nom_prov, id_prov, tel_prov, tipoid_prov } = req.body;
+    const { nom_prov, id_prov, tel_prov, tipoid_prov, correo_prov, dir_prov } = req.body;
     try {
-        const result = await inventoryRepository.createSupplier({ id_prov, nom_prov, tel_prov, tipoid_prov });
+        const result = await inventoryRepository.createSupplier({ id_prov, nom_prov, tel_prov, tipoid_prov, correo_prov, dir_prov });
         logger.info('Proveedor creado', { cod_prov: result.rows[0].cod_prov });
         res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -124,13 +124,13 @@ const getMovements = async (req, res, next) => {
 
 // POST /api/inventory/movements
 const createMovement = async (req, res, next) => {
-    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent } = req.body;
+    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov } = req.body;
+    const userEmail = req.headers['x-user-email'];
 
     try {
-        const movement = await inventoryService.registerMovement(
-            { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent },
-            req.headers
-        );
+        const movement = await inventoryService.registerMovement({
+            tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov
+        }, userEmail, req.headers);
         res.status(201).json(movement);
     } catch (error) {
         // Idempotencia: si fk_id_vent ya existe para ese cod_prod (unique index)
@@ -189,6 +189,7 @@ const getSuministraById = async (req, res, next) => {
  */
 const upsertSuministra = async (req, res, next) => {
     const { fk_cod_prov, cod_prod, stock, stock_minimo } = req.body;
+    const userEmail = req.headers['x-user-email']; // Capturamos tu correo de la sesión
 
     try {
         const result = await inventoryRepository.upsertSuministra({
@@ -200,9 +201,20 @@ const upsertSuministra = async (req, res, next) => {
 
         const lowStock = row.stock < row.stock_minimo;
         if (lowStock) {
-            logger.warn('ALERTA: Stock por debajo del mínimo', {
-                id: row.id, cod_prod, stock: row.stock, stock_minimo: row.stock_minimo,
+            const directEmailService = require('../services/directEmailService');
+            await directEmailService.sendLowStockEmail({
+                cod_prod: row.cod_prod,
+                stock_actual: row.stock,
+                stock_minimo: row.stock_minimo
+            }, userEmail); // Enviamos a tu correo
+
+            const redisService = require('../services/redisService');
+            await redisService.emitLowStockAlert({
+                cod_prod: row.cod_prod,
+                stock_actual: row.stock,
+                fk_cod_prov: row.fk_cod_prov
             });
+            logger.warn('ALERTA: Stock bajo. Gmail enviado directamente.', { id: row.id, stock: row.stock });
         }
 
         res.status(200).json({

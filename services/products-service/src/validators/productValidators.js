@@ -15,13 +15,10 @@ const createProductSchema = Joi.object({
     fechaven_prod: Joi.date().iso().allow(null).optional().messages({
         'date.format': 'fechaven_prod debe ser una fecha válida (ISO 8601).',
     }),
-    fk_cod_cat: Joi.number().integer().allow(null, '').optional(),
-    stock_actual: Joi.number().integer().min(0).default(0).messages({
-        'number.min': 'stock_actual no puede ser negativo.',
-    }),
     stock_minimo: Joi.number().integer().min(0).default(0).messages({
         'number.min': 'stock_minimo no puede ser negativo.',
     }),
+    fk_cod_cats: Joi.any().optional(),
 });
 
 const updateProductSchema = Joi.object({
@@ -35,7 +32,7 @@ const updateProductSchema = Joi.object({
     fechaven_prod: Joi.date().iso().allow(null).messages({
         'date.format': 'fechaven_prod debe ser una fecha válida (ISO 8601).',
     }),
-    fk_cod_cat: Joi.number().integer().allow(null, ''),
+    fk_cod_cats: Joi.any().optional(),
     stock_actual: Joi.number().integer().min(0).messages({
         'number.min': 'stock_actual no puede ser negativo.',
     }),

@@ -11,7 +11,11 @@ const db = require('../config/db');
 
 const findAll = ({ limit = 20, offset = 0 } = {}) =>
     db.query(
-        `SELECT * FROM Ventas ORDER BY fecha_vent DESC LIMIT $1 OFFSET $2`,
+        `SELECT v.*, 
+            (SELECT string_agg(nom_prod, ', ') FROM Producto_Venta pv WHERE pv.fk_id_vent = v.id_vent) as productos_resumen
+         FROM Ventas v 
+         ORDER BY fecha_vent DESC 
+         LIMIT $1 OFFSET $2`,
         [limit, offset]
     );
 
@@ -41,7 +45,7 @@ const findByIdWithItems = async (id_vent) => {
  * Crea una venta con sus líneas en una sola transacción.
  * @param {{ metodopago_usu, items: Array<{cod_prod, cantidad, precio_unit}> }} data
  */
-const createWithItems = async ({ id_usu, metodopago_usu, items }) => {
+const createWithItems = async ({ metodopago_usu, items }) => {
     const client = await db.connect();
     try {
         await client.query('BEGIN');
@@ -53,18 +57,18 @@ const createWithItems = async ({ id_usu, metodopago_usu, items }) => {
         const precio_prod_final = items.length > 0 ? Number(items[0].precio_unit) : 0;
 
         const ventaRes = await client.query(
-            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, fk_id_usu, estado)
-             VALUES ($1, $2, $3, $4, 'pendiente') RETURNING *`,
-            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null, id_usu || null]
+            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, estado)
+             VALUES ($1, $2, $3, 'pendiente') RETURNING *`,
+            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null]
         );
         const venta = ventaRes.rows[0];
 
         const itemRows = [];
         for (const item of items) {
             const r = await client.query(
-                `INSERT INTO Producto_Venta (fk_id_vent, cod_prod, cantidad, precio_unit)
-                 VALUES ($1, $2, $3, $4) RETURNING *`,
-                [venta.id_vent, item.cod_prod, item.cantidad, item.precio_unit]
+                `INSERT INTO Producto_Venta (fk_id_vent, cod_prod, cantidad, precio_unit, nom_prod)
+                 VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+                [venta.id_vent, item.cod_prod, item.cantidad, item.precio_unit, item.nom_prod || null]
             );
             itemRows.push(r.rows[0]);
         }

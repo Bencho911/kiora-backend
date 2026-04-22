@@ -25,8 +25,8 @@ const createCheckoutSession = async (order, items) => {
                 quantity: item.cantidad,
             })),
             mode: 'payment',
-            success_url: 'http://localhost:5173/kiosk/success?order_id=' + order.id_vent,
-            cancel_url: 'http://localhost:5173/kiosk/cancel?order_id=' + order.id_vent,
+            success_url: 'http://localhost:5173/payment-success?order_id=' + order.id_vent,
+            cancel_url: 'http://localhost:5173/payment-cancel?order_id=' + order.id_vent,
             client_reference_id: String(order.id_vent),
             metadata: {
                 order_id: String(order.id_vent),

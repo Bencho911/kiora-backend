@@ -54,7 +54,7 @@ app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 
 // ── Rutas ─────────────────────────────────────────────────────────────────
 // IMPORTANTE: invoices debe ir ANTES de /:id para evitar conflicto de rutas
-app.use('/api/orders/invoices', require('./routes/invoiceRoutes'));
+app.use('/api/invoices', require('./routes/invoiceRoutes'));
 app.use('/api/orders/checkout', require('./routes/paymentRoutes'));
 app.use('/api/orders',          require('./routes/orderRoutes'));
 

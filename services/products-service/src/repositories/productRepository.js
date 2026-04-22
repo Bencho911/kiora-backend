@@ -15,11 +15,9 @@ const db = require('../config/db');
 const findAll = ({ limit = 20, offset = 0 } = {}) =>
     db.query(
         `SELECT p.cod_prod, p.nom_prod, p.descrip_prod, p.precio_unitario,
-                p.fechaven_prod, p.fk_cod_cat,
-                p.stock_actual, p.stock_minimo, p.url_imagen,
-                c.nom_cat
+                p.fechaven_prod, p.fk_cod_cats,
+                p.stock_actual, p.stock_minimo, p.url_imagen
          FROM Producto p
-         LEFT JOIN Categoria c ON c.cod_cat = p.fk_cod_cat
          WHERE p.activo = true
          ORDER BY p.cod_prod
          LIMIT $1 OFFSET $2`,
@@ -36,25 +34,23 @@ const countAll = () => db.query('SELECT COUNT(*) FROM Producto WHERE activo = tr
 const findById = (cod_prod) =>
     db.query(
         `SELECT p.cod_prod, p.nom_prod, p.descrip_prod, p.precio_unitario,
-                p.fechaven_prod, p.fk_cod_cat,
-                p.stock_actual, p.stock_minimo, p.url_imagen,
-                c.nom_cat, c.descrip_cat
+                p.fechaven_prod, p.fk_cod_cats,
+                p.stock_actual, p.stock_minimo, p.url_imagen
          FROM Producto p
-         LEFT JOIN Categoria c ON c.cod_cat = p.fk_cod_cat
          WHERE p.cod_prod = $1`,
         [cod_prod]
     );
 
 /**
  * Inserta un nuevo producto.
- * @param {{ nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cat, stock_actual, stock_minimo, url_imagen }} fields
+ * @param {{ nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen }} fields
  */
-const create = ({ nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cat, stock_actual, stock_minimo, url_imagen }) =>
+const create = ({ nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen }) =>
     db.query(
-        `INSERT INTO Producto (nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cat, stock_actual, stock_minimo, url_imagen)
+        `INSERT INTO Producto (nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
-        [nom_prod, descrip_prod || null, precio_unitario, fechaven_prod || null, fk_cod_cat || null, stock_actual ?? 0, stock_minimo ?? 0, url_imagen || null]
+        [nom_prod, descrip_prod || null, precio_unitario, fechaven_prod || null, fk_cod_cats || [], stock_actual ?? 0, stock_minimo ?? 0, url_imagen || null]
     );
 
 /**
@@ -63,7 +59,7 @@ const create = ({ nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod
  * @param {object} fields
  */
 const update = (cod_prod, fields) => {
-    const allowed = ['nom_prod', 'descrip_prod', 'precio_unitario', 'fechaven_prod', 'fk_cod_cat', 'stock_actual', 'stock_minimo', 'url_imagen'];
+    const allowed = ['nom_prod', 'descrip_prod', 'precio_unitario', 'fechaven_prod', 'fk_cod_cats', 'stock_actual', 'stock_minimo', 'url_imagen'];
     const entries = Object.entries(fields).filter(([key]) => allowed.includes(key));
     if (entries.length === 0) return Promise.resolve({ rows: [] });
     const setClauses = entries.map(([key], i) => `${key} = $${i + 1}`).join(', ');
@@ -104,9 +100,8 @@ const remove = (cod_prod) =>
  */
 const findLowStock = () =>
     db.query(
-        `SELECT p.cod_prod, p.nom_prod, p.stock_actual, p.stock_minimo, c.nom_cat
+        `SELECT p.cod_prod, p.nom_prod, p.stock_actual, p.stock_minimo, p.fk_cod_cats
          FROM Producto p
-         LEFT JOIN Categoria c ON c.cod_cat = p.fk_cod_cat
          WHERE p.stock_actual <= p.stock_minimo AND p.activo = true
          ORDER BY p.cod_prod`
     );

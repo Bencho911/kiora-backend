@@ -2,49 +2,46 @@
 
 const db = require('../config/db');
 
-/**
- * inventoryRepository
- * Responsabilidad única: acceso a datos de Proveedor, Inventario y Suministra.
- */
+/* ── Proveedores ──────────────────────────────────────────────────────────── */
 
-/* ── Proveedores ────────────────────────────────────────────────────────── */
-
-const findAllSuppliers = ({ limit = 100, offset = 0 } = {}) =>
-    db.query('SELECT * FROM Proveedor ORDER BY cod_prov LIMIT $1 OFFSET $2', [limit, offset]);
-
-const countAllSuppliers = () => db.query('SELECT COUNT(*) FROM Proveedor');
-
-const findSupplierById = (cod_prov) =>
-    db.query('SELECT * FROM Proveedor WHERE cod_prov = $1', [cod_prov]);
-
-/**
- * @param {{ id_prov, nom_prov, tel_prov, tipoid_prov }} fields
- */
-const createSupplier = ({ id_prov, nom_prov, tel_prov, tipoid_prov }) =>
+const findAllSuppliers = ({ limit = 20, offset = 0 } = {}) =>
     db.query(
-        `INSERT INTO Proveedor (id_prov, nom_prov, tel_prov, tipoid_prov)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [id_prov || null, nom_prov, tel_prov || null, tipoid_prov || null]
+        'SELECT * FROM Proveedor ORDER BY cod_prov LIMIT $1 OFFSET $2',
+        [limit, offset]
     );
 
-const updateSupplier = (cod_prov, fields) => {
-    const allowed = ['id_prov', 'nom_prov', 'tel_prov', 'tipoid_prov'];
-    const entries = Object.entries(fields).filter(([key]) => allowed.includes(key));
-    if (entries.length === 0) return Promise.resolve({ rows: [] });
-    const setClauses = entries.map(([key], i) => `${key} = $${i + 1}`).join(', ');
+const countAllSuppliers = () =>
+    db.query('SELECT COUNT(*) FROM Proveedor');
+
+const findSupplierById = (id) =>
+    db.query('SELECT * FROM Proveedor WHERE cod_prov = $1', [id]);
+
+const createSupplier = ({ id_prov, nom_prov, tel_prov, tipoid_prov, correo_prov, dir_prov }) =>
+    db.query(
+        `INSERT INTO Proveedor (id_prov, nom_prov, tel_prov, tipoid_prov, correo_prov, dir_prov)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [id_prov, nom_prov, tel_prov, tipoid_prov, correo_prov, dir_prov]
+    );
+
+const updateSupplier = (id, fields) => {
+    const keys = Object.keys(fields).filter(k => fields[k] !== undefined);
+    if (keys.length === 0) return null;
+
+    const setClause = keys.map((k, i) => `${k} = $${i + 2}`).join(', ');
+    const values = keys.map(k => fields[k]);
+
     return db.query(
-        `UPDATE Proveedor SET ${setClauses}
-         WHERE cod_prov = $${entries.length + 1} RETURNING *`,
-        [...entries.map(([, val]) => val), cod_prov]
+        `UPDATE Proveedor SET ${setClause} WHERE cod_prov = $1 RETURNING *`,
+        [id, ...values]
     );
 };
 
-const removeSupplier = (cod_prov) =>
-    db.query('DELETE FROM Proveedor WHERE cod_prov = $1 RETURNING cod_prov', [cod_prov]);
+const removeSupplier = (id) =>
+    db.query('DELETE FROM Proveedor WHERE cod_prov = $1 RETURNING *', [id]);
 
-/* ── Movimientos de stock ────────────────────────────────────────────────── */
+/* ── Movimientos (Historial) ─────────────────────────────────────────────── */
 
-const findAllMovements = ({ cod_prod, limit = 20, offset = 0 } = {}) => {
+const findAllMovements = ({ cod_prod = null, limit = 20, offset = 0 } = {}) => {
     if (cod_prod) {
         return db.query(
             'SELECT * FROM Inventario WHERE cod_prod = $1 ORDER BY fecha_mov DESC, id_mov DESC LIMIT $2 OFFSET $3',
@@ -62,14 +59,11 @@ const countAllMovements = (cod_prod) =>
         ? db.query('SELECT COUNT(*) FROM Inventario WHERE cod_prod = $1', [cod_prod])
         : db.query('SELECT COUNT(*) FROM Inventario');
 
-/**
- * @param {{ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent }} fields
- */
-const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent }) =>
+const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov }) =>
     db.query(
-        `INSERT INTO Inventario (tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [tipo_mov, fecha_mov || new Date(), cantidad, cod_prod, fk_cod_prov || null, fk_id_vent || null]
+        `INSERT INTO Inventario (tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [tipo_mov, fecha_mov || new Date(), cantidad, cod_prod, fk_cod_prov || null, fk_id_vent || null, desc_mov || null]
     );
 
 /* ── Suministra (proveedor ↔ producto + stock) ───────────────────────────── */
@@ -84,16 +78,28 @@ const findAllSuministra = ({ limit = 20, offset = 0 } = {}) =>
         [limit, offset]
     );
 
-const countAllSuministra = () => db.query('SELECT COUNT(*) FROM Suministra');
+const countAllSuministra = () =>
+    db.query('SELECT COUNT(*) FROM Suministra');
 
 const findSuministraById = (id) =>
-    db.query(
-        `SELECT s.*, p.nom_prov
-         FROM Suministra s
-         JOIN Proveedor p ON p.cod_prov = s.fk_cod_prov
-         WHERE s.id = $1`,
-        [id]
+    db.query('SELECT * FROM Suministra WHERE id = $1', [id]);
+
+/**
+ * Actualiza el stock sumando o restando un delta.
+ * Si no se especifica proveedor, se intenta actualizar el primer registro encontrado para el producto.
+ */
+const updateStock = (cod_prod, delta, fk_cod_prov = null) => {
+    if (fk_cod_prov) {
+        return db.query(
+            'UPDATE Suministra SET stock = stock + $1 WHERE cod_prod = $2 AND fk_cod_prov = $3 RETURNING *',
+            [delta, cod_prod, fk_cod_prov]
+        );
+    }
+    return db.query(
+        'UPDATE Suministra SET stock = stock + $1 WHERE id = (SELECT id FROM Suministra WHERE cod_prod = $2 LIMIT 1) RETURNING *',
+        [delta, cod_prod]
     );
+};
 
 /**
  * Crea o actualiza (upsert) el registro proveedor-producto.
@@ -135,6 +141,7 @@ module.exports = {
     findAllSuministra,
     countAllSuministra,
     findSuministraById,
+    updateStock,
     upsertSuministra,
     findLowStock,
 };

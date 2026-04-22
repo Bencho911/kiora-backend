@@ -2,7 +2,9 @@
 
 const inventoryRepository = require('../repositories/inventoryRepository');
 const logger = require('../config/logger');
+const directEmailService = require('./directEmailService');
 const env = require('../config/env');
+const redisService = require('./redisService');
 const { createCircuitBreaker } = require('../utils/circuitBreaker');
 const { outgoingHeaders } = require('../utils/httpClient');
 
@@ -39,21 +41,49 @@ const productsBreaker = createCircuitBreaker(
 /* ── Registrar movimiento + sincronizar stock ────────────────────────────── */
 
 /**
- * Registra un movimiento de inventario y sincroniza el stock con products-service.
- *
- * @param {{ tipo_mov, cantidad, cod_prod, fecha_mov?, fk_cod_prov?, fk_id_vent? }} data
- * @param {object} reqHeaders — Headers del request original
- * @returns {object} Movimiento registrado
+ * Registra un movimiento y sincroniza con Suministra y ProductsService.
+ * @param {Object} movementData 
+ * @param {string} userEmail - El correo del usuario para la notificación
+ * @param {Object} reqHeaders - Encabezados originales para propagar
  */
-async function registerMovement(data, reqHeaders) {
-    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent } = data;
+async function registerMovement(movementData, userEmail, reqHeaders) {
+    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov } = movementData;
 
     // 1. Guardar historial en tabla Inventario
     const result = await inventoryRepository.createMovement({
-        tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent,
+        tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov
     });
     const movement = result.rows[0];
     logger.info('Movimiento registrado', { id_mov: movement.id_mov, tipo_mov, cod_prod });
+
+    try {
+        const delta = tipo_mov === 'entrada' ? Number(cantidad) : -Number(cantidad);
+        const stockRes = await inventoryRepository.updateStock(cod_prod, delta, fk_cod_prov);
+        
+        // --- NUEVO: Verificar bajo stock para enviar Gmail ---
+        if (stockRes && stockRes.rows.length > 0) {
+            const row = stockRes.rows[0];
+            if (row.stock < row.stock_minimo) {
+                logger.warn('Stock bajo detectado. Enviando alerta Gmail...', { cod_prod, stock: row.stock });
+                
+                // Intento 1: Envío directo (Plan B de Usuarios - El más fiable)
+                await directEmailService.sendLowStockEmail({
+                    cod_prod,
+                    stock_actual: row.stock,
+                    stock_minimo: row.stock_minimo
+                }, userEmail);
+
+                // Intento 2: Redis (Para la campana del sistema)
+                await redisService.emitLowStockAlert({
+                    cod_prod,
+                    stock_actual: row.stock,
+                    fk_cod_prov: row.fk_cod_prov
+                });
+            }
+        }
+    } catch (err) {
+        logger.error('Error sincronizando con Suministra o enviando alerta', { error: err.message });
+    }
 
     // 2. Sincronización reactiva con products-service vía circuit breaker
     const stockDelta = tipo_mov === 'entrada' ? Number(cantidad) : -Number(cantidad);

@@ -56,32 +56,27 @@ const commitReservation = async (req, res) => {
         }
 
         for (const item of items) {
+            // 1. Registrar movimiento de salida
             await inventoryRepository.createMovement({
                 tipo_mov: 'salida',
                 cantidad: item.cantidad,
                 cod_prod: item.cod_prod,
-                fk_id_vent: Number(orderId)
+                fk_id_vent: Number(orderId),
+                desc_mov: `VENTA SAGA #${orderId}`
             });
 
-            // SAGA EXTENSION: Verificar si hay que disparar Alerta de Stock Bajo
-            try {
-                const stockRes = await db.query(
-                    'SELECT stock, stock_minimo, fk_cod_prov FROM Suministra WHERE cod_prod = $1', 
-                    [item.cod_prod]
-                );
-                
-                if (stockRes.rows.length > 0) {
-                    const row = stockRes.rows[0];
-                    if (row.stock <= row.stock_minimo) {
-                        redisService.emitLowStockAlert({
-                            cod_prod: item.cod_prod,
-                            stock_actual: row.stock,
-                            fk_cod_prov: row.fk_cod_prov
-                        });
-                    }
+            // 2. Descontar de Suministra para disparar alertas
+            const stockUpdateRes = await inventoryRepository.updateStock(item.cod_prod, -item.cantidad);
+            
+            if (stockUpdateRes.rows.length > 0) {
+                const row = stockUpdateRes.rows[0];
+                if (row.stock <= row.stock_minimo) {
+                    await redisService.emitLowStockAlert({
+                        cod_prod: item.cod_prod,
+                        stock_actual: row.stock,
+                        fk_cod_prov: row.fk_cod_prov
+                    });
                 }
-            } catch (err) {
-                logger.error('Fallo silencioso revisando stock bajo', { error: err.message });
             }
         }
 

@@ -1,6 +1,7 @@
 'use strict';
 
 const orderRepository = require('../repositories/orderRepository');
+const invoiceRepository = require('../repositories/invoiceRepository');
 const logger = require('../config/logger');
 const env = require('../config/env');
 const { createCircuitBreaker } = require('../utils/circuitBreaker');
@@ -40,11 +41,11 @@ const inventoryBreaker = createCircuitBreaker(
 
 /**
  * Crea una venta con sus ítems.
- * @param {{ id_usu: number, metodopago_usu?: string, items: Array }} data
+ * @param {{ metodopago_usu?: string, items: Array }} data
  */
 async function createOrder(data) {
     const order = await orderRepository.createWithItems(data);
-    logger.info('Venta creada', { id_vent: order.id_vent, id_usu: data.id_usu });
+    logger.info('Venta creada', { id_vent: order.id_vent });
     return order;
 }
 
@@ -98,6 +99,7 @@ async function completeOrder(orderId, reqHeaders) {
                     cantidad: item.cantidad,
                     cod_prod: item.cod_prod,
                     fk_id_vent: Number(orderId),
+                    desc_mov: `Venta #${orderId}`,
                 },
                 headers
             );
@@ -131,7 +133,7 @@ async function completeOrder(orderId, reqHeaders) {
                             cantidad: reg.cantidad,
                             cod_prod: reg.cod_prod,
                             fk_id_vent: Number(orderId),
-                            observaciones: 'COMPENSACION SAGA: FALLO DE ORDEN',
+                            desc_mov: `COMPENSACION SAGA: FALLO DE ORDEN #${orderId}`,
                         }),
                     },
                     { maxRetries: 3 }
@@ -155,8 +157,26 @@ async function completeOrder(orderId, reqHeaders) {
 
     // Paso 3: Todo OK — actualizar estado en BD
     const result = await orderRepository.updateStatus(orderId, 'completada');
+    const updatedOrder = result.rows[0];
+
+    // ── Paso Extra: Generar registro en tabla Factura ──
+    try {
+        const totalQty = order.items.reduce((sum, i) => sum + i.cantidad, 0);
+        await invoiceRepository.create({
+            fk_id_vent: orderId,
+            id_usu: 1, // Usuario general por defecto
+            cantidad_vent: totalQty,
+            precio_prod: order.items[0]?.precio_unit || 0,
+            montototal_vent: updatedOrder.montofinal_vent
+        });
+        logger.info('Registro de factura creado automáticamente', { orderId });
+    } catch (invErr) {
+        logger.error('Error al crear registro de factura automático', { orderId, error: invErr.message });
+        // No bloqueamos la venta por esto
+    }
+
     logger.info('Estado de venta consolidado', { id_vent: orderId, estado: 'completada' });
-    return { ok: true, data: result.rows[0] };
+    return { ok: true, data: updatedOrder };
 }
 
 /* ── Actualizar estado genérico ──────────────────────────────────────────── */
@@ -171,6 +191,49 @@ async function updateStatus(orderId, estado, reqHeaders) {
 
     const order = await orderRepository.findByIdWithItems(orderId);
     if (!order) return { error: 'Venta no encontrada.', status: 404 };
+
+    // Regla: Si la venta ya está reembolsada, es un estado FINAL.
+    if (order.estado === 'reembolsada') {
+        return { 
+            error: 'Esta venta ya ha sido reembolsada; no se puede volver a cambiar su estado.', 
+            status: 400 
+        };
+    }
+
+    // Regla de Negocio: Solo permitir reembolso si la venta estaba completada
+    if (estado === 'reembolsada' && order.estado !== 'completada') {
+        return { 
+            error: 'Solo se pueden reembolsar ventas que ya estén marcadas como "completada".', 
+            status: 400 
+        };
+    }
+
+    // Si es reembolso, devolver stock a inventario
+    if (estado === 'reembolsada') {
+        logger.info('Procesando reembolso de inventario', { orderId });
+        const headers = outgoingHeaders(reqHeaders);
+        
+        for (const item of order.items) {
+            try {
+                await fetchWithRetry(
+                    `${env.inventoryServiceUrl}/api/inventory/movements`,
+                    {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({
+                            tipo_mov: 'entrada',
+                            cantidad: item.cantidad,
+                            cod_prod: item.cod_prod,
+                            fk_id_vent: Number(orderId),
+                            desc_mov: `REEMBOLSO: Venta #${orderId}`
+                        })
+                    }
+                );
+            } catch (err) {
+                logger.error('Error al devolver stock en reembolso', { orderId, cod_prod: item.cod_prod, error: err.message });
+            }
+        }
+    }
 
     const result = await orderRepository.updateStatus(orderId, estado);
     logger.info('Estado de venta actualizado', { id_vent: orderId, estado });

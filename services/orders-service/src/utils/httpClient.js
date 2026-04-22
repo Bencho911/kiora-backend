@@ -10,6 +10,11 @@ function outgoingHeaders(headers) {
     const h = { 'Content-Type': 'application/json' };
     const cid = headers['x-correlation-id'];
     if (cid) h['x-correlation-id'] = cid;
+
+    // Propagar Authorization para permisos inter-servicio
+    const auth = headers['authorization'] || headers['Authorization'];
+    if (auth) h['Authorization'] = auth;
+    
     return h;
 }
 

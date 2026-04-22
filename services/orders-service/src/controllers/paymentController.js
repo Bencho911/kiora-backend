@@ -40,6 +40,7 @@ const generateCheckoutParams = async (req, res) => {
         });
 
     } catch (error) {
+        logger.error('Error generando link de pago Checkout', { error: error.message, stack: error.stack });
         res.status(500).json({ error: 'Error interno generando link de pago.' });
     }
 };
