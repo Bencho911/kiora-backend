@@ -31,6 +31,7 @@ const PUBLIC_PREFIXES = [
     '/api/docs.json',       // Specs JSON proxy de products/inventory/orders
     '/api/auth/',           // login, register, refresh, forgot-password, etc.
     '/api/v1/auth/',        // versioned auth routes
+    '/api/public/',         // Catálogo público del kiosco (sin auth)
     '/api/users/health',
     '/api/users/ready',
     '/api/users/docs-json',

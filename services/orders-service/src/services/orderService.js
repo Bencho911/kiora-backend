@@ -176,6 +176,21 @@ async function completeOrder(orderId, reqHeaders) {
         // No bloqueamos la venta por esto
     }
 
+    // ── Dashboard en tiempo real (Notificar vía WebSockets en API Gateway) ──
+    try {
+        const GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
+        await fetch(`${GATEWAY_URL}/api/internal/broadcast`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                event: 'new_sale',
+                payload: updatedOrder
+            })
+        });
+    } catch (wsErr) {
+        logger.warn('No se pudo notificar nueva venta al Dashboard (WebSocket)', { error: wsErr.message });
+    }
+
     logger.info('Estado de venta consolidado', { id_vent: orderId, estado: 'completada' });
     return { ok: true, data: updatedOrder };
 }

@@ -31,7 +31,7 @@ const createCheckoutSession = async (order, items) => {
                 price_data: {
                     currency: 'cop',
                     product_data: {
-                        name: item.nombre_prod || ('Producto #' + item.cod_prod),
+                        name: item.nom_prod || ('Producto #' + item.cod_prod),
                     },
                     unit_amount: Math.round(item.precio_unit * 100), // Stripe usa centavos
                 },

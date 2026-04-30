@@ -1,7 +1,7 @@
 'use strict';
 
 const stripeService = require('../services/stripeService');
-const { getOrderById } = require('../repositories/orderRepository');
+const { findByIdWithItems } = require('../repositories/orderRepository');
 const db = require('../config/db');
 const logger = require('../config/logger');
 
@@ -9,14 +9,12 @@ const generateCheckoutParams = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const orderResult = await getOrderById(id);
-        if (orderResult.rows.length === 0) {
+        const orden = await findByIdWithItems(id);
+        if (!orden) {
             return res.status(404).json({ error: 'Orden no encontrada.' });
         }
-
-        const orden = orderResult.rows[0];
         
-        if (orden.estado === 'pagada' || orden.estado === 'completada') {
+        if (orden.estado === 'pagado' || orden.estado === 'completada') {
             return res.status(400).json({ error: 'La orden ya está pagada o completada.' });
         }
 

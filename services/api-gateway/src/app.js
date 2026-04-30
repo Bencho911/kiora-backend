@@ -13,6 +13,7 @@ const logger = require('./config/logger');
 
 const correlationId = require('./middleware/correlationId');
 const authMiddleware = require('./middleware/auth');
+const auditMiddleware = require('./middleware/auditMiddleware');
 
 const app = express();
 
@@ -84,24 +85,6 @@ const deprecationMiddleware = (req, res, next) => {
 };
 app.use(deprecationMiddleware);
 
-// ── Autenticación centralizada (JWT) ──────────────────────────────────────
-app.use(authMiddleware);
-
-// ── Swagger UI ────────────────────────────────────────────────────────────
-const swaggerOptions = {
-    explorer: true,
-    swaggerOptions: {
-        urls: [
-            { url: '/api/users/docs-json', name: 'Users Service' },
-            { url: '/api/docs.json?svc=products', name: 'Products Service' },
-            { url: '/api/docs.json?svc=inventory', name: 'Inventory Service' },
-            { url: '/api/docs.json?svc=orders', name: 'Orders Service' },
-            { url: '/api/docs.json?svc=reports', name: 'Reports Service' },
-        ],
-    },
-};
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(null, swaggerOptions));
-
 // ── Service URLs ──────────────────────────────────────────────────────────
 const services = {
     users: process.env.USERS_SERVICE_URL || 'http://localhost:3001',
@@ -111,21 +94,6 @@ const services = {
     notifications: process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:3005',
     reports: process.env.REPORTS_SERVICE_URL || 'http://localhost:3006',
 };
-
-// ── Swagger docs proxy ───────────────────────────────────────────────────
-app.get('/api/docs.json', async (req, res) => {
-    const svc = req.query.svc;
-    const base = services[svc];
-    if (!base) return res.status(400).json({ error: 'svc param must be products, inventory or orders' });
-    try {
-        const r = await fetch(`${base}/api/docs.json`);
-        const json = await r.json();
-        res.json(json);
-    } catch (err) {
-        logger.warn(`No se pudo obtener docs de ${svc}`, { error: err.message });
-        res.status(503).json({ error: `${svc} service unavailable` });
-    }
-});
 
 // ── Proxy factory ─────────────────────────────────────────────────────────
 const onProxyError = (serviceName) => (err, req, res) => {
@@ -151,6 +119,56 @@ const transparentProxy = (serviceName, target) =>
             error: onProxyError(serviceName),
         },
     });
+
+// ── Rutas públicas (sin JWT) — Catálogo del kiosco ────────────────────────
+app.use('/api/public/products', createProxyMiddleware({
+    target: services.products,
+    changeOrigin: true,
+    pathRewrite: { '^/api/public/products': '/api/products' },
+    on: { error: onProxyError('products-service (public)') },
+}));
+app.use('/api/public/categories', createProxyMiddleware({
+    target: services.products,
+    changeOrigin: true,
+    pathRewrite: { '^/api/public/categories': '/api/categories' },
+    on: { error: onProxyError('products-service (public)') },
+}));
+
+// ── Autenticación centralizada (JWT) ──────────────────────────────────────
+app.use(authMiddleware);
+
+// ── Audit log de acciones admin ───────────────────────────────────────────
+app.use(auditMiddleware);
+
+// ── Swagger UI ────────────────────────────────────────────────────────────
+const swaggerOptions = {
+    explorer: true,
+    swaggerOptions: {
+        urls: [
+            { url: '/api/users/docs-json', name: 'Users Service' },
+            { url: '/api/docs.json?svc=products', name: 'Products Service' },
+            { url: '/api/docs.json?svc=inventory', name: 'Inventory Service' },
+            { url: '/api/docs.json?svc=orders', name: 'Orders Service' },
+            { url: '/api/docs.json?svc=reports', name: 'Reports Service' },
+        ],
+    },
+};
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(null, swaggerOptions));
+
+// ── Swagger docs proxy ───────────────────────────────────────────────────
+app.get('/api/docs.json', async (req, res) => {
+    const svc = req.query.svc;
+    const base = services[svc];
+    if (!base) return res.status(400).json({ error: 'svc param must be products, inventory or orders' });
+    try {
+        const r = await fetch(`${base}/api/docs.json`);
+        const json = await r.json();
+        res.json(json);
+    } catch (err) {
+        logger.warn(`No se pudo obtener docs de ${svc}`, { error: err.message });
+        res.status(503).json({ error: `${svc} service unavailable` });
+    }
+});
 
 /**
  * Crea un proxy que reescribe /api/v1/X → /api/X al microservicio.
@@ -197,6 +215,46 @@ app.use('/api/incidents', transparentProxy('users-service', services.users));
 // ── Health checks ─────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'API Gateway is running' });
+});
+
+// ── Dashboard stats (ventas en tiempo real) ───────────────────────────────
+app.get('/api/dashboard/stats', async (req, res) => {
+    try {
+        const ordersRes = await fetch(`${services.orders}/api/orders?limit=100`);
+        const ordersData = await ordersRes.json();
+        const ventas = ordersData.data || [];
+
+        const hoy = new Date().toISOString().slice(0, 10);
+        const ventasHoy = ventas.filter(v => v.fecha_vent && v.fecha_vent.slice(0, 10) === hoy);
+        const completadas = ventasHoy.filter(v => v.estado === 'completada');
+
+        const totalVentas = completadas.length;
+        const montoTotal = completadas.reduce((sum, v) => sum + Number(v.montofinal_vent || 0), 0);
+        const ticketPromedio = totalVentas > 0 ? montoTotal / totalVentas : 0;
+
+        res.json({
+            fecha: hoy,
+            ventas_hoy: totalVentas,
+            monto_total: montoTotal.toFixed(2),
+            ticket_promedio: ticketPromedio.toFixed(2),
+            ultima_venta: completadas[0] || null,
+        });
+    } catch (err) {
+        logger.error('Error obteniendo stats del dashboard', { error: err.message });
+        res.status(503).json({ error: 'No se pudieron obtener estadísticas' });
+    }
+});
+
+// ── Webhook interno para emisión de WebSockets ────────────────────────────
+// Los microservicios llaman a este endpoint interno para notificar eventos al frontend
+app.post('/api/internal/broadcast', (req, res) => {
+    const { event, payload } = req.body || {};
+    if (event && app.locals.io) {
+        app.locals.io.emit(event, payload);
+        res.status(200).json({ ok: true, broadcasted: true });
+    } else {
+        res.status(400).json({ error: 'Falta event name o Socket.IO no está listo' });
+    }
 });
 
 // ── Métricas (Prometheus) ─────────────────────────────────────────────────
