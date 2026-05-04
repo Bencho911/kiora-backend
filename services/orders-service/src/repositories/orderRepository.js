@@ -57,18 +57,18 @@ const createWithItems = async ({ metodopago_usu, items, id_usu }) => {
         const precio_prod_final = items.length > 0 ? Number(items[0].precio_unit) : 0;
 
         const ventaRes = await client.query(
-            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, fk_id_usu, estado)
-             VALUES ($1, $2, $3, $4, 'pendiente') RETURNING *`,
-            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null, id_usu || null]
+            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, estado)
+             VALUES ($1, $2, $3, 'pendiente') RETURNING *`,
+            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null]
         );
         const venta = ventaRes.rows[0];
 
         const itemRows = [];
         for (const item of items) {
             const r = await client.query(
-                `INSERT INTO Producto_Venta (fk_id_vent, cod_prod, cantidad, precio_unit, nom_prod)
-                 VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-                [venta.id_vent, item.cod_prod, item.cantidad, item.precio_unit, item.nom_prod || null]
+                `INSERT INTO Producto_Venta (fk_id_vent, cod_prod, cantidad, precio_unit)
+                 VALUES ($1, $2, $3, $4) RETURNING *`,
+                [venta.id_vent, item.cod_prod, item.cantidad, item.precio_unit]
             );
             itemRows.push(r.rows[0]);
         }
