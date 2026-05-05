@@ -76,6 +76,10 @@ El `products-service` es dueño absoluto de:
 
 Los demás servicios (ej. inventario, ventas) almacenan el ID del producto como un entero (`cod_prod`) sin realizar relaciones de clave foránea en la base de datos (Foreign Keys). La consistencia de los datos se mantiene en la capa de aplicación mediante llamadas a la API REST de este servicio.
 
+## Tareas Programadas (Cron)
+
+El servicio cuenta con un **cron job** interno implementado con `node-cron` (`src/jobs/expirationJob.js`) que ejecuta periódicamente la limpieza y verificación de productos caducados. Las alertas de caducidad se envían de forma asíncrona al sistema de notificaciones vía Redis Streams.
+
 ## Scripts disponibles
 
 ```bash

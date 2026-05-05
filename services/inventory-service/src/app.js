@@ -16,6 +16,14 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'inventory-service' }));
 
+// ── Métricas (Prometheus) ─────────────────────────────────────────────────
+const promClient = require('prom-client');
+promClient.collectDefaultMetrics({ prefix: 'inventory_' });
+app.get('/metrics', async (_req, res) => {
+    res.set('Content-Type', promClient.register.contentType);
+    res.end(await promClient.register.metrics());
+});
+
 // ── Readiness (verifica conectividad con PostgreSQL) ──────────────────────
 const db = require('./config/db');
 app.get('/health/ready', async (_req, res) => {
@@ -35,12 +43,17 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 
 // ── Rutas ─────────────────────────────────────────────────────────────────
+app.use('/api/inventory/saga', require('./routes/reservationRoutes'));
 app.use('/api/inventory', require('./routes/inventoryRoutes'));
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
     logger.error('Error no controlado', { message: err.message, stack: err.stack });
-    res.status(500).json({ error: 'Error interno del servidor' });
+    res.status(err.status || 500).json({
+        error: err.status ? err.message : 'Error interno del servidor.',
+        code: 'INTERNAL_ERROR',
+        details: process.env.NODE_ENV === 'development' ? { stack: err.stack } : undefined,
+    });
 });
 
 module.exports = app;

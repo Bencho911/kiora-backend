@@ -6,7 +6,8 @@ const validate = require('../middleware/validate');
 const { loginSchema, registerSchema, updateUserSchema, updateRoleSchema, forgotPasswordSchema, verifyResetCodeSchema, resetPasswordSchema, changePasswordSchema } = require('../validators/authValidators');
 const {
     register, login, refresh, logout, unlockUser, getUsers, getMe,
-    updateUser, deleteUser, updateRole, forgotPassword, verifyResetCode, resetPassword, changePassword
+    updateUser, deleteUser, updateRole, forgotPassword, verifyResetCode, resetPassword, changePassword,
+    adminResetPassword
 } = require('../controllers/authController');
 
 const isTestEnv = process.env.NODE_ENV === 'test';
@@ -336,6 +337,40 @@ router.patch('/users/:id', verifyToken, isAdmin, validate(updateUserSchema), upd
  *         description: Redis no disponible (BLACKLIST_FAIL_OPEN=false).
  */
 router.delete('/users/:id', verifyToken, isAdmin, deleteUser);
+
+/**
+ * @swagger
+ * /api/auth/users/{id}/password:
+ *   patch:
+ *     summary: Restablecer contraseña de un usuario (solo admin)
+ *     tags: [Usuarios]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [password]
+ *             properties:
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Contraseña actualizada exitosamente.
+ *       403:
+ *         description: No es administrador.
+ *       404:
+ *         description: Usuario no encontrado.
+ */
+router.patch('/users/:id/password', verifyToken, isAdmin, adminResetPassword);
 
 /**
  * @swagger

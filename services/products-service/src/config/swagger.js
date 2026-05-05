@@ -102,8 +102,7 @@ const options = {
                         descrip_prod:    { type: 'string',  example: 'Leche entera pasteurizada 1L' },
                         precio_unitario: { type: 'number',  example: 2.50 },
                         fechaven_prod:   { type: 'string',  format: 'date', example: '2025-12-31' },
-                        fk_cod_cat:      { type: 'integer', example: 1 },
-                        nom_cat:         { type: 'string',  example: 'Lácteos' },
+                        fk_cod_cats:     { type: 'array', items: { type: 'integer' }, example: [1, 2] },
                     },
                 },
                 ProductoInput: {
@@ -114,7 +113,7 @@ const options = {
                         descrip_prod:    { type: 'string',  example: 'Leche entera pasteurizada 1L' },
                         precio_unitario: { type: 'number',  minimum: 0, example: 2.50 },
                         fechaven_prod:   { type: 'string',  format: 'date', example: '2025-12-31' },
-                        fk_cod_cat:      { type: 'integer', example: 1 },
+                        fk_cod_cats:     { type: 'array', items: { type: 'integer' }, example: [1] },
                     },
                 },
                 Categoria: {

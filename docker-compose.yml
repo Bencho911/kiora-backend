@@ -16,6 +16,8 @@ services:
       POSTGRES_DB: kiora_users
     ports:
       - "5433:5432"
+    networks:
+      - kiora-backend-net
     volumes:
       - users_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,6 +36,8 @@ services:
       POSTGRES_DB: kiora_products
     ports:
       - "5434:5432"
+    networks:
+      - kiora-backend-net
     volumes:
       - products_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -52,6 +56,8 @@ services:
       POSTGRES_DB: kiora_inventory
     ports:
       - "5435:5432"
+    networks:
+      - kiora-backend-net
     volumes:
       - inventory_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -70,6 +76,8 @@ services:
       POSTGRES_DB: kiora_orders
     ports:
       - "5436:5432"
+    networks:
+      - kiora-backend-net
     volumes:
       - orders_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -89,6 +97,8 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    networks:
+      - kiora-backend-net
     volumes:
       - redis_data:/data
     healthcheck:
@@ -107,6 +117,8 @@ services:
       PGADMIN_DEFAULT_PASSWORD: admin
     ports:
       - "5050:80"
+    networks:
+      - kiora-backend-net
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
@@ -127,14 +139,22 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    networks:
+      - kiora-public-net
+      - kiora-backend-net
     env_file:
       - ./services/api-gateway/.env.docker
+    environment:
+      OTEL_SERVICE_NAME: api-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      REDIS_HOST: kiora-redis
     depends_on:
       - users-service
       - products-service
       - inventory-service
       - orders-service
       - notifications-service
+      - reports-service
 
   users-service:
     build:
@@ -144,6 +164,8 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3001"
+    networks:
+      - kiora-backend-net
     env_file:
       - ./services/users-service/.env.docker
     environment:
@@ -152,6 +174,8 @@ services:
       DB_NAME: kiora_users
       REDIS_HOST: kiora-redis
       REDIS_PORT: 6379
+      OTEL_SERVICE_NAME: users-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       users-db:
         condition: service_healthy
@@ -166,12 +190,17 @@ services:
     restart: unless-stopped
     ports:
       - "3002:3002"
+    networks:
+      - kiora-backend-net
     env_file:
       - ./services/products-service/.env.docker
     environment:
       DB_HOST: products-db
       DB_PORT: 5432
       DB_NAME: kiora_products
+      REDIS_HOST: kiora-redis
+      OTEL_SERVICE_NAME: products-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       products-db:
         condition: service_healthy
@@ -184,13 +213,20 @@ services:
     restart: unless-stopped
     ports:
       - "3003:3003"
+    networks:
+      - kiora-backend-net
     env_file:
       - ./services/inventory-service/.env.docker
     environment:
       DB_HOST: inventory-db
       DB_PORT: 5432
       DB_NAME: kiora_inventory
+      REDIS_HOST: kiora-redis
+      REDIS_PORT: 6379
+      ADMIN_EMAIL: ruben.camilo321@gmail.com
       PRODUCTS_SERVICE_URL: http://products-service:3002
+      OTEL_SERVICE_NAME: inventory-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       inventory-db:
         condition: service_healthy
@@ -203,6 +239,8 @@ services:
     restart: unless-stopped
     ports:
       - "3004:3004"
+    networks:
+      - kiora-backend-net
     env_file:
       - ./services/orders-service/.env.docker
     environment:
@@ -210,6 +248,8 @@ services:
       DB_PORT: 5432
       DB_NAME: kiora_orders
       INVENTORY_SERVICE_URL: http://inventory-service:3003
+      OTEL_SERVICE_NAME: orders-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       orders-db:
         condition: service_healthy
@@ -222,6 +262,8 @@ services:
     restart: unless-stopped
     ports:
       - "3005:3005"
+    networks:
+      - kiora-backend-net
     env_file:
       - ./services/notifications-service/.env.docker
     environment:
@@ -231,6 +273,77 @@ services:
       kiora-redis:
         condition: service_healthy
 
+  reports-service:
+    build:
+      context: ./services/reports-service
+      dockerfile: Dockerfile
+    container_name: kiora_reports_service
+    restart: unless-stopped
+    ports:
+      - "3006:3006"
+    networks:
+      - kiora-backend-net
+    env_file:
+      - ./services/reports-service/.env.docker
+    depends_on:
+      - orders-service
+
+  # ─────────────────────────────────────────────
+  # OBSERVABILIDAD
+  # ─────────────────────────────────────────────
+
+  # Jaeger — Distributed Tracing UI
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: kiora_jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"   # UI
+      - "4318:4318"     # OTLP HTTP receiver
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  # Prometheus — Métricas
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: kiora_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+
+  # Grafana — Dashboards
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: kiora_grafana
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - jaeger
+
+
+networks:
+  kiora-public-net:
+    name: kiora-public-net
+    driver: bridge
+  kiora-backend-net:
+    name: kiora-backend-net
+    driver: bridge
+
 volumes:
   users_db_data:
   products_db_data:
@@ -238,3 +351,6 @@ volumes:
   orders_db_data:
   redis_data:
   pgadmin_data:
+  prometheus_data:
+  grafana_data:
+

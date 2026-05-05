@@ -7,16 +7,15 @@ const pool = new Pool({
     host: process.env.DB_HOST,
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
-    port: process.env.DB_PORT,
+    port: Number(process.env.DB_PORT),
+    // ── Límites del pool ──────────────────────────────────────────────────
+    max: parseInt(process.env.DB_POOL_MAX, 10) || 20,
+    connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT_MS, 10) || 5000,
+    idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS, 10) || 30000,
 });
 
-pool.connect((err, client, release) => {
-    if (err) {
-        logger.error('Error conectando a PostgreSQL', { error: err.stack });
-        return;
-    }
-    logger.info('Conectado exitosamente a la base de datos Kiora');
-    release();
+pool.on('error', (err) => {
+    logger.error('Error inesperado en el pool de PostgreSQL', { error: err.message });
 });
 
 module.exports = pool;

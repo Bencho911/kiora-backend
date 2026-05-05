@@ -2,6 +2,8 @@
 
 Sistema de **microservicios** en Node.js para el kiosco inteligente Kiora.
 
+**Contribuir:** [CONTRIBUTING.md](CONTRIBUTING.md) — Definition of Done, PRs y gobernanza de secretos ([docs/SECRETS_INVENTORY.md](docs/SECRETS_INVENTORY.md)).
+
 ---
 
 ## Arquitectura
@@ -14,7 +16,8 @@ kiora-backend/
 │   ├── products-service/       # Catálogo de productos y categorías (puerto 3002)
 │   ├── inventory-service/      # Stock, movimientos e inventario de proveedores (puerto 3003)
 │   ├── orders-service/         # Ventas y facturación (puerto 3004)
-│   └── notifications-service/  # Emails vía Redis pub/sub (puerto 3005)
+│   ├── notifications-service/  # Emails vía Redis Streams / Consumer Groups (puerto 3005)
+│   └── reports-service/        # Emisión PDFKit asíncrona de reportes y facturas (puerto 3006)
 ├── database/
 │   └── kiora_schema.sql        # Referencia global del esquema (documentación)
 ├── docs/
@@ -58,8 +61,17 @@ Sigue estos pasos para configurar y ejecutar el proyecto:
 | inventory-service      | `localhost:3003`    | `kiora_inventory` @ 5435 |
 | orders-service         | `localhost:3004`    | `kiora_orders` @ 5436  |
 | notifications-service  | `localhost:3005`    | Sin BD (Redis + SMTP)  |
+| reports-service        | `localhost:3006`    | Sin BD (PDFKit Stream) |
 | Redis                  | `localhost:6379`    | —              |
 | pgAdmin                | `localhost:5050`    | —              |
+
+---
+
+## Stack de Observabilidad
+El clúster implementa monitoreo en tiempo real recolectando métricas e instrumentando las transacciones vía OTLP:
+- **Prometheus**: Reúne métricas nativas en `/metrics`.
+- **Grafana**: Sirve los dashboards visuales aprovisionados.
+- **OpenTelemetry / Jaeger**: Tracing distribuido propagado en transacciones y Redis.
 
 ---
 
@@ -79,6 +91,7 @@ Gestión de usuarios, autenticación JWT y recuperación de contraseña.
 Catálogo de productos: crear, consultar y administrar productos y categorías.
 
 - **BD:** `kiora_products` (PostgreSQL @ `localhost:5434`)
+- **Swagger:** `http://localhost:3002/api/docs`
 - **Tablas:** `Categoria`, `Producto`
 
 ### 🏭 inventory-service
@@ -86,6 +99,7 @@ Catálogo de productos: crear, consultar y administrar productos y categorías.
 Control de stock: movimientos de entrada/salida, proveedores y stock disponible.
 
 - **BD:** `kiora_inventory` (PostgreSQL @ `localhost:5435`)
+- **Swagger:** `http://localhost:3003/api/docs`
 - **Tablas:** `Proveedor`, `Inventario`, `Suministra`
 - Consulta a `products-service` via HTTP para validar productos.
 
@@ -94,22 +108,21 @@ Control de stock: movimientos de entrada/salida, proveedores y stock disponible.
 Ventas y facturación: crear ordenes, detalles de productos vendidos y facturas.
 
 - **BD:** `kiora_orders` (PostgreSQL @ `localhost:5436`)
+- **Swagger:** `http://localhost:3004/api/docs`
 - **Tablas:** `Ventas`, `Producto_Venta`, `Factura`
 - Consulta a `users-service` e `inventory-service` via HTTP.
 
 ### 🔔 notifications-service
 
-Envío centralizado de emails.
+Envío centralizado de emails y alertas proactivas.
 
-- **Sin BD propia** — consume eventos del canal Redis `kiora:notifications`.
-- Para enviar un email desde cualquier servicio, publicar en Redis:
-  ```js
-  redisClient.publish('kiora:notifications', JSON.stringify({
-    to: 'usuario@example.com',
-    subject: 'Asunto',
-    html: '<p>Cuerpo HTML</p>',
-  }));
-  ```
+- **Sin BD propia** — consume eventos de Redis Streams mediante **Consumer Groups** garantizando encolamiento resistente a caídas.
+- Para enviar un email desde cualquier servicio, se inyecta el payload a `notifications_stream` usando `XADD` (Ej. Stock bajo o cron caducidad).
+
+### 📄 reports-service
+
+Microservicio aislado y de alto rendimiento dedicado a exportar facturas PDF con el detalle de las Ventas. Usando streams y buffers directamente sobre HTTP para no consumir memoria. Usa `pdfkit`.
+- **Swagger:** `http://localhost:3006/api/docs`
 
 ---
 
@@ -127,6 +140,6 @@ npm run migrate:up:docker # Aplica migraciones en contenedor Docker
 
 ## CI/CD
 
-**GitHub Actions** en cada push/PR a `main` o `develop`: users-service (lint, audit high, tests, migraciones), products-service (lint, audit critical, tests, migraciones), inventory-service y orders-service (lint, audit high, tests), api-gateway (lint, audit high, tests). Ver [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+**GitHub Actions** en cada push/PR a `main` o `develop`: validación de **`docker compose config`**, users-service (lint, audit high, tests, migraciones), products-service (lint, audit critical, tests, migraciones), inventory-service, orders-service, notifications-service y reports-service (lint, audit high, tests), api-gateway (lint, audit high, tests). Ver [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Lista de checks para branch protection: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > **products-service:** `audit:ci` usa `--audit-level=critical` porque dependencias transitivas (p. ej. Cloudinary v1) reportan *high* hasta una actualización mayor planificada.

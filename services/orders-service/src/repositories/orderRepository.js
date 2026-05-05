@@ -11,7 +11,11 @@ const db = require('../config/db');
 
 const findAll = ({ limit = 20, offset = 0 } = {}) =>
     db.query(
-        `SELECT * FROM Ventas ORDER BY fecha_vent DESC LIMIT $1 OFFSET $2`,
+        `SELECT v.*, 
+            (SELECT string_agg(nom_prod, ', ') FROM Producto_Venta pv WHERE pv.fk_id_vent = v.id_vent) as productos_resumen
+         FROM Ventas v 
+         ORDER BY fecha_vent DESC 
+         LIMIT $1 OFFSET $2`,
         [limit, offset]
     );
 
@@ -41,7 +45,7 @@ const findByIdWithItems = async (id_vent) => {
  * Crea una venta con sus líneas en una sola transacción.
  * @param {{ metodopago_usu, items: Array<{cod_prod, cantidad, precio_unit}> }} data
  */
-const createWithItems = async ({ id_usu, metodopago_usu, items }) => {
+const createWithItems = async ({ metodopago_usu, items, id_usu }) => {
     const client = await db.connect();
     try {
         await client.query('BEGIN');
@@ -53,9 +57,9 @@ const createWithItems = async ({ id_usu, metodopago_usu, items }) => {
         const precio_prod_final = items.length > 0 ? Number(items[0].precio_unit) : 0;
 
         const ventaRes = await client.query(
-            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, fk_id_usu, estado)
-             VALUES ($1, $2, $3, $4, 'pendiente') RETURNING *`,
-            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null, id_usu || null]
+            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, estado)
+             VALUES ($1, $2, $3, 'pendiente') RETURNING *`,
+            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null]
         );
         const venta = ventaRes.rows[0];
 
@@ -80,6 +84,22 @@ const createWithItems = async ({ id_usu, metodopago_usu, items }) => {
 };
 
 /**
+ * Inserta un evento en la tabla outbox_events.
+ * Diseñado para llamarse dentro de una transacción existente o de forma standalone.
+ *
+ * @param {string} eventType — Tipo de evento (ej: 'inventory.movement')
+ * @param {object} payload — Datos del evento
+ * @param {object} [client] — Cliente PG de una transacción activa (opcional)
+ */
+const insertOutboxEvent = async (eventType, payload, client) => {
+    const conn = client || db;
+    return conn.query(
+        `INSERT INTO outbox_events (event_type, payload) VALUES ($1, $2) RETURNING *`,
+        [eventType, JSON.stringify(payload)]
+    );
+};
+
+/**
  * Cambia el estado de una venta.
  * @param {number} id_vent
  * @param {string} estado — 'pendiente' | 'completada' | 'cancelada'
@@ -99,6 +119,7 @@ module.exports = {
     findById,
     findByIdWithItems,
     createWithItems,
+    insertOutboxEvent,
     updateStatus,
     remove,
 };

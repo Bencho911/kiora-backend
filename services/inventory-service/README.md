@@ -77,4 +77,4 @@ El `inventory-service` es dueño absoluto de:
 - Tabla `Inventario` (movimientos de stock)
 - Tabla `Suministra` (relación stock disponible por proveedor/producto)
 
-**Nota arquitectónica:** Los campos `cod_prod` de este servicio son enteros (INT) y **no** son Foreign Keys (FK) hacia la base de datos de productos. La consistencia referencial se confía a nivel de aplicación consultando `products-service`.
+**Nota arquitectónica:** Los campos `cod_prod` de este servicio son enteros (INT) y **no** son Foreign Keys (FK) hacia la base de datos de productos. La consistencia referencial se confía a nivel de aplicación consultando `products-service`. Adicionalmente, el servicio publica asíncronamente eventos de alerta (e.g. bajo stock) vía **Redis Streams** para no bloquear las transacciones.

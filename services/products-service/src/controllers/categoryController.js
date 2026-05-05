@@ -1,6 +1,7 @@
 'use strict';
 
 const categoryRepository = require('../repositories/categoryRepository');
+const parsePagination = require('../utils/parsePagination');
 const logger = require('../config/logger');
 
 /**
@@ -11,9 +12,7 @@ const logger = require('../config/logger');
 // GET /api/categories
 const getCategories = async (req, res, next) => {
     try {
-        const page   = Math.max(1, parseInt(req.query.page  || 1, 10));
-        const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit || 100, 10)));
-        const offset = (page - 1) * limit;
+        const { page, limit, offset } = parsePagination(req.query, { defaultLimit: 100 });
         const [rows, count] = await Promise.all([
             categoryRepository.findAll({ limit, offset }),
             categoryRepository.countAll(),
@@ -51,9 +50,6 @@ const getCategoryById = async (req, res, next) => {
 // POST /api/categories
 const createCategory = async (req, res, next) => {
     const { nom_cat, descrip_cat } = req.body;
-    if (!nom_cat) {
-        return res.status(400).json({ error: 'nom_cat es obligatorio.' });
-    }
     try {
         const result = await categoryRepository.create({ nom_cat, descrip_cat });
         logger.info('Categoría creada', { cod_cat: result.rows[0].cod_cat });
