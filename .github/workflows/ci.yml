@@ -12,8 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Stubs .env.docker para compose config
+        # docker compose comprueba que env_file exista aunque sea vacío; los reales están en .gitignore.
+        run: |
+          set -e
+          for svc in api-gateway users-service products-service inventory-service orders-service notifications-service reports-service; do
+            touch "services/$svc/.env.docker"
+          done
       - name: Validar sintaxis de docker-compose.yml
-        run: docker compose config
+        run: docker compose config -q
 
   test-users-service:
     name: Tests — users-service
@@ -113,7 +120,7 @@ jobs:
           cache-dependency-path: services/products-service/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - name: npm audit (solo critical; ver nota cloudinary en package.json)
+      - name: npm audit (nivel high)
         run: npm run audit:ci
       - run: npm test -- --forceExit
         env:
