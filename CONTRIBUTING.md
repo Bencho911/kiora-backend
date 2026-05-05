@@ -90,7 +90,7 @@ Antes de pedir review o merge, el autor comprueba lo siguiente según **qué car
 | **Cambio en `src/db/migrations/*.sql`** | **`npm run migrate:up`** en entorno local contra BD de prueba **y** si existe job de migraciones en CI para ese servicio, que el PR mantenga ese job verde |
 | **Cambio en contratos HTTP entre servicios** | Actualizar [docs/INTER_SERVICE_CONTRACTS.md](docs/INTER_SERVICE_CONTRACTS.md) |
 | **Variables de entorno nuevas** | Actualizar `.env.example` del servicio **sin valores secretos reales** |
-| **Raíz: `docker-compose.yml`, CI** | CI valida `docker compose config --no-env-resolution -q` (no exige `.env.docker` en el repo); en local, tras `./setup.sh`, conviene `docker compose config` para comprobar rutas de `env_file` |
+| **Raíz: `docker-compose.yml`, CI** | CI crea **stubs vacíos** `services/*/.env.docker` y ejecuta `docker compose config -q`; en local, tras `./setup.sh`, conviene `docker compose config` con tus `.env.docker` reales |
 
 ### Por servicio (referencia rápida)
 
