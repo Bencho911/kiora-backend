@@ -11,7 +11,7 @@ Este documento recoge **gobernanza del repo** y el **plan de auditoría por fase
 | **0 — Baseline y gobernanza** | Ramas protegidas (documentado aquí), DoD por servicio, inventario de secretos ([docs/SECRETS_INVENTORY.md](docs/SECRETS_INVENTORY.md)). | Hecho |
 | **1 — CI homogéneo por microservicio** | Lint + tests + `audit:ci` en Actions para todos los servicios Node que exponen API (incluye **notifications-service**). | Hecho |
 | **2 — Infra declarativa y cobertura reports** | Validación de `docker compose config` en CI; **reports-service** con ESLint, Jest (smoke) y audit nivel high. | Hecho |
-| **3 — Deuda de dependencias focalizada** | Tratar auditorías más estrictas donde hay decisión consciente (p. ej. **products-service** y Cloudinary; transitive **exceljs**/**uuid** en reports cuando haya upgrade compatible). | Pendiente |
+| **3 — Deuda de dependencias focalizada** | **products-service:** SDK **Cloudinary ≥2.7** (corrección [GHSA-g4mf-96x5-5m2c](https://github.com/advisories/GHSA-g4mf-96x5-5m2c)), almacenamiento Multer con **`multer-storage-cloudinary-v2`**; `audit:ci` alineado a **high**. **reports-service:** *moderate* **exceljs→uuid** sigue documentado hasta upgrade upstream compatible con el stack CJS/Jest actual. | Hecho |
 
 Las secciones siguientes detallan la Fase 0 operativa; las Fases 1–2 se reflejan en [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
@@ -73,6 +73,8 @@ Los nombres deben coincidir **literalmente** con la propiedad `name:` de cada jo
 
 Los PR deben ser **pequeños** y con un objetivo claro (un microservicio o tema transversal acotado).
 
+Si el cambio es **grande** (varios servicios, lockfiles extensos o riesgo de regresión), abrir una **rama dedicada** (`feat/…`, `fix/…`, `chore/…`) y un PR único y revisable, sin mezclar otros temas.
+
 ---
 
 ## 2. Definition of Done (DoD) por servicio (Fase 0.2)
@@ -95,7 +97,7 @@ Antes de pedir review o merge, el autor comprueba lo siguiente según **qué car
 | Servicio | Lint | Tests | Migraciones (integración) | Audit CI |
 |----------|------|-------|-----------------------------|----------|
 | users-service | sí | sí | sí (`test:migrations`) | high |
-| products-service | sí | sí (smoke) | sí (`test:migrations`) | critical\* |
+| products-service | sí | sí (smoke) | sí (`test:migrations`) | high |
 | inventory-service | sí | sí (smoke) | — | high |
 | orders-service | sí | sí (smoke) | — | high |
 | notifications-service | sí | sí (smoke) | — | high |
@@ -103,9 +105,7 @@ Antes de pedir review o merge, el autor comprueba lo siguiente según **qué car
 | api-gateway | sí | sí (smoke) | — | high |
 | Otros | según `package.json` del servicio | | | |
 
-\*Ver nota en README sobre Cloudinary hasta upgrade planificado.
-
-†`npm audit` puede seguir reportando vulnerabilidades **moderate** transitivas (p. ej. cadena **exceljs** → **uuid**); la política CI es `--audit-level=high`. Ver Fase 3 del roadmap.
+†`npm audit` puede seguir reportando vulnerabilidades **moderate** transitivas (cadena **exceljs** → **uuid**). Subir **uuid** a versiones parcheadas (≥14) rompe hoy la cadena **CommonJS + Jest** con **exceljs**; la política CI es `--audit-level=high`. Seguir releases de **exceljs** o valorar sustituto cuando el equipo priorice cerrar esos *moderate*.
 
 ### Checklist del autor (copiar en descripción del PR)
 

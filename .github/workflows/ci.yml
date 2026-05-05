@@ -113,7 +113,7 @@ jobs:
           cache-dependency-path: services/products-service/package-lock.json
       - run: npm ci
       - run: npm run lint
-      - name: npm audit (solo critical; ver nota cloudinary en package.json)
+      - name: npm audit (nivel high)
         run: npm run audit:ci
       - run: npm test -- --forceExit
         env:
