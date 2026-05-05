@@ -56,6 +56,7 @@ app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 // IMPORTANTE: invoices debe ir ANTES de /:id para evitar conflicto de rutas
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
 app.use('/api/orders/checkout', require('./routes/paymentRoutes'));
+app.use('/api/orders/export',   require('./routes/exportRoutes'));
 app.use('/api/orders',          require('./routes/orderRoutes'));
 
 // eslint-disable-next-line no-unused-vars

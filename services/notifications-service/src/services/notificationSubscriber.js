@@ -124,7 +124,8 @@ function startSubscriber(redisConfig, from) {
         // Primero, procesar mensajes pendientes
         await processPending();
 
-        while (true) {
+        // Bucle de consumo continuo (XREADGROUP + BLOCK)
+        for (;;) {
             try {
                 const result = await redis.xreadgroup(
                     'GROUP', group, consumer,

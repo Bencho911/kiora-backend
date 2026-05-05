@@ -2,6 +2,8 @@
 
 Sistema de **microservicios** en Node.js para el kiosco inteligente Kiora.
 
+**Contribuir:** [CONTRIBUTING.md](CONTRIBUTING.md) — Definition of Done, PRs y gobernanza de secretos ([docs/SECRETS_INVENTORY.md](docs/SECRETS_INVENTORY.md)).
+
 ---
 
 ## Arquitectura
@@ -138,6 +140,6 @@ npm run migrate:up:docker # Aplica migraciones en contenedor Docker
 
 ## CI/CD
 
-**GitHub Actions** en cada push/PR a `main` o `develop`: users-service (lint, audit high, tests, migraciones), products-service (lint, audit critical, tests, migraciones), inventory-service y orders-service (lint, audit high, tests), api-gateway (lint, audit high, tests). Ver [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+**GitHub Actions** en cada push/PR a `main` o `develop`: validación de **`docker compose config`**, users-service (lint, audit high, tests, migraciones), products-service (lint, audit critical, tests, migraciones), inventory-service, orders-service, notifications-service y reports-service (lint, audit high, tests), api-gateway (lint, audit high, tests). Ver [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Lista de checks para branch protection: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > **products-service:** `audit:ci` usa `--audit-level=critical` porque dependencias transitivas (p. ej. Cloudinary v1) reportan *high* hasta una actualización mayor planificada.

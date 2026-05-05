@@ -7,6 +7,14 @@ on:
     branches: [main, develop]
 
 jobs:
+  compose-config:
+    name: Infra — docker compose (validación)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar sintaxis de docker-compose.yml
+        run: docker compose config
+
   test-users-service:
     name: Tests — users-service
     runs-on: ubuntu-latest
@@ -182,6 +190,46 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: services/orders-service/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run audit:ci
+      - run: npm test -- --forceExit
+        env:
+          NODE_ENV: test
+
+  test-notifications-service:
+    name: Tests — notifications-service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/notifications-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/notifications-service/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run audit:ci
+      - run: npm test -- --forceExit
+        env:
+          NODE_ENV: test
+
+  test-reports-service:
+    name: Tests — reports-service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/reports-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/reports-service/package-lock.json
       - run: npm ci
       - run: npm run lint
       - run: npm run audit:ci
