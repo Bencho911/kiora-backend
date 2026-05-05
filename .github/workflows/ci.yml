@@ -13,7 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validar sintaxis de docker-compose.yml
-        run: docker compose config
+        # Sin resolver env_file: los .env.docker están en .gitignore y no existen en el runner.
+        run: docker compose config --no-env-resolution -q
 
   test-users-service:
     name: Tests — users-service

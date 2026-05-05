@@ -140,6 +140,6 @@ npm run migrate:up:docker # Aplica migraciones en contenedor Docker
 
 ## CI/CD
 
-**GitHub Actions** en cada push/PR a `main` o `develop`: validación de **`docker compose config`**, users-service (lint, audit high, tests, migraciones), products-service (lint, audit high, tests, migraciones), inventory-service, orders-service, notifications-service y reports-service (lint, audit high, tests), api-gateway (lint, audit high, tests). Ver [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Lista de checks para branch protection: [CONTRIBUTING.md](CONTRIBUTING.md).
+**GitHub Actions** en cada push/PR a `main` o `develop`: validación de **`docker compose config`** (en CI sin resolver `.env.docker`, que no están en git), users-service (lint, audit high, tests, migraciones), products-service (lint, audit high, tests, migraciones), inventory-service, orders-service, notifications-service y reports-service (lint, audit high, tests), api-gateway (lint, audit high, tests). Ver [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Lista de checks para branch protection: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > **reports-service:** `npm audit` puede listar hallazgos **moderate** en la cadena **exceljs → uuid**; `audit:ci` usa `--audit-level=high` como en el resto de servicios. Cuando **exceljs** (o un sustituto) permita **uuid** parcheado sin romper CommonJS/Jest, conviene revisar de nuevo.
