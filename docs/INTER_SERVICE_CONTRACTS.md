@@ -18,14 +18,13 @@ En Docker Compose los valores suelen ser nombres de servicio (`http://products-s
 
 Cada llamada inter-servicio tiene un contrato explícito con timeout, política de reintentos y comportamiento ante errores:
 
-| Origen → Destino | Método | Ruta | Timeout | Retry | 2xx | 4xx | 5xx / Red |
-|---|---|---|---|---|---|---|---|
-| orders → inventory | `POST` | `/api/inventory/movements` | 5 s | 3× backoff + jitter | Movimiento creado (salida de stock) | 400/409 → no reintentar, error de negocio | Reintentar; si falla → SAGA compensación |
-| orders → inventory | `POST` | `/api/inventory/movements` (compensación SAGA) | 5 s | 3× backoff + jitter | Entrada compensatoria creada | — | Log CRÍTICO (requiere reconciliación manual) |
-| orders → inventory | `POST` | `/api/inventory/saga/reserve` | 5 s | 0 (síncrono, falla al usuario) | Reserva temporal OK | 409 → stock agotado → informar usuario | 503 → error genérico al usuario |
-| orders → inventory | `POST` | `/api/inventory/saga/reserve/commit` | 5 s | 3× backoff + jitter | Commit de reserva permanente | — | Log error (venta ya pagada, reconciliación manual) |
-| orders → gateway | `POST` | `/api/internal/broadcast` | 3 s | 1 intento (fire & forget) | WebSocket emitido al dashboard | — | Solo log (no bloquea la venta) |
-| inventory → products | `PUT` | `/api/products/:cod_prod/stock` | 5 s | 3× backoff + jitter (via circuit breaker) | Stock actualizado en catálogo | 409 → stock insuficiente, break loop | Log error, marcar como "no sincronizado" |
+| Origen → Destino | Método | Ruta | Timeout | Retry | Modo | 2xx | 4xx | 5xx / Red |
+|---|---|---|---|---|---|---|---|---|
+| orders → inventory | `POST` | `/api/inventory/movements` | 5 s | 5× backoff + jitter | **Async (Outbox)** | Movimiento creado | 409 → compensación automática (cancelar orden + reembolso Stripe) | Reintentar; si agota → DLQ |
+| orders → inventory | `POST` | `/api/inventory/saga/reserve` | 5 s | 0 (falla al usuario) | **Síncrono** | Reserva temporal OK | 409 → stock agotado → informar usuario | 503 → error genérico al usuario |
+| orders → inventory | `POST` | `/api/inventory/saga/reserve/commit` | 5 s | 5× backoff + jitter | **Async (Outbox)** | Commit de reserva permanente | — | Reintentar; si agota → DLQ |
+| orders → gateway | `POST` | `/api/internal/broadcast` | 3 s | 1 intento (fire & forget) | Síncrono | WebSocket emitido al dashboard | — | Solo log (no bloquea la venta) |
+| inventory → products | `PUT` | `/api/products/:cod_prod/stock` | 5 s | 3× backoff + jitter (via circuit breaker) | Síncrono | Stock actualizado en catálogo | 409 → stock insuficiente, break loop | Log error, marcar como "no sincronizado" |
 
 ---
 
