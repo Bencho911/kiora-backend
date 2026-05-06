@@ -6,7 +6,7 @@ const directEmailService = require('./directEmailService');
 const env = require('../config/env');
 const redisService = require('./redisService');
 const { createCircuitBreaker } = require('../utils/circuitBreaker');
-const { outgoingHeaders, DEFAULT_TIMEOUT_MS } = require('../utils/httpClient');
+const { outgoingHeaders } = require('../utils/httpClient');
 
 /**
  * inventoryService
@@ -17,27 +17,19 @@ const { outgoingHeaders, DEFAULT_TIMEOUT_MS } = require('../utils/httpClient');
 /* ── Circuit Breaker para products-service ────────────────────────────────── */
 
 async function _putProductStock(url, body, headers) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-
-    try {
-        const res = await fetch(url, {
-            method: 'PUT',
-            headers,
-            body: JSON.stringify(body),
-            signal: controller.signal,
-        });
-        if (!res.ok) {
-            const errBody = await res.text();
-            const err = new Error(`Products responded with ${res.status}: ${errBody}`);
-            err.status = res.status;
-            err.body = errBody;
-            throw err;
-        }
-        return res;
-    } finally {
-        clearTimeout(timer);
+    const res = await fetch(url, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+        const errBody = await res.text();
+        const err = new Error(`Products responded with ${res.status}: ${errBody}`);
+        err.status = res.status;
+        err.body = errBody;
+        throw err;
     }
+    return res;
 }
 
 const productsBreaker = createCircuitBreaker(
@@ -125,8 +117,7 @@ async function registerMovement(movementData, reqHeaders) {
         }
 
         if (attempt < MAX_RETRIES) {
-            const delay = 500 * Math.pow(2, attempt - 1) * (0.5 + Math.random());
-            await new Promise((resolve) => setTimeout(resolve, delay));
+            await new Promise((resolve) => setTimeout(resolve, 500 * Math.pow(2, attempt - 1)));
         }
     }
 

@@ -45,7 +45,7 @@ const findByIdWithItems = async (id_vent) => {
  * Crea una venta con sus líneas en una sola transacción.
  * @param {{ metodopago_usu, items: Array<{cod_prod, cantidad, precio_unit}> }} data
  */
-const createWithItems = async ({ metodopago_usu, items, id_usu: _id_usu }) => {
+const createWithItems = async ({ metodopago_usu, items, id_usu }) => {
     const client = await db.connect();
     try {
         await client.query('BEGIN');
