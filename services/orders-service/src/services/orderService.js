@@ -210,17 +210,17 @@ async function updateStatus(orderId, estado, reqHeaders) {
 
     // Regla: Si la venta ya está reembolsada, es un estado FINAL.
     if (order.estado === 'reembolsada') {
-        return { 
-            error: 'Esta venta ya ha sido reembolsada; no se puede volver a cambiar su estado.', 
-            status: 400 
+        return {
+            error: 'Esta venta ya ha sido reembolsada; no se puede volver a cambiar su estado.',
+            status: 400
         };
     }
 
     // Regla de Negocio: Solo permitir reembolso si la venta estaba completada
     if (estado === 'reembolsada' && order.estado !== 'completada') {
-        return { 
-            error: 'Solo se pueden reembolsar ventas que ya estén marcadas como "completada".', 
-            status: 400 
+        return {
+            error: 'Solo se pueden reembolsar ventas que ya estén marcadas como "completada".',
+            status: 400
         };
     }
 
@@ -228,7 +228,7 @@ async function updateStatus(orderId, estado, reqHeaders) {
     if (estado === 'reembolsada') {
         logger.info('Procesando reembolso de inventario', { orderId });
         const headers = outgoingHeaders(reqHeaders);
-        
+
         for (const item of order.items) {
             try {
                 await fetchWithRetry(

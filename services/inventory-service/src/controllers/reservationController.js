@@ -3,6 +3,8 @@
 const db = require('../config/db');
 const redisService = require('../services/redisService');
 const inventoryRepository = require('../repositories/inventoryRepository');
+const inventoryService = require('../services/inventoryService');
+const env = require('../config/env');
 const logger = require('../config/logger');
 
 const reserveInventory = async (req, res) => {
@@ -14,11 +16,12 @@ const reserveInventory = async (req, res) => {
 
     try {
         for (const item of items) {
-            const pgResult = await db.query(
-                'SELECT SUM(stock) as total_stock FROM Suministra WHERE cod_prod = $1', 
-                [item.cod_prod]
-            );
-            const pgStock = parseInt(pgResult.rows[0].total_stock || 0, 10);
+            const prodRes = await fetch(`${env.productsServiceUrl}/api/products/${item.cod_prod}`);
+            if (!prodRes.ok) {
+                return res.status(404).json({ error: 'Producto ' + item.cod_prod + ' no encontrado en catálogo.' });
+            }
+            const productData = await prodRes.json();
+            const pgStock = parseInt(productData.stock_actual || 0, 10);
             
             const reserved = await redisService.getReservedQuantityForProduct(item.cod_prod);
             const effectiveStock = pgStock - reserved;
@@ -56,28 +59,13 @@ const commitReservation = async (req, res) => {
         }
 
         for (const item of items) {
-            // 1. Registrar movimiento de salida
-            await inventoryRepository.createMovement({
+            await inventoryService.registerMovement({
                 tipo_mov: 'salida',
                 cantidad: item.cantidad,
                 cod_prod: item.cod_prod,
                 fk_id_vent: Number(orderId),
                 desc_mov: `VENTA SAGA #${orderId}`
-            });
-
-            // 2. Descontar de Suministra para disparar alertas
-            const stockUpdateRes = await inventoryRepository.updateStock(item.cod_prod, -item.cantidad);
-            
-            if (stockUpdateRes.rows.length > 0) {
-                const row = stockUpdateRes.rows[0];
-                if (row.stock <= row.stock_minimo) {
-                    await redisService.emitLowStockAlert({
-                        cod_prod: item.cod_prod,
-                        stock_actual: row.stock,
-                        fk_cod_prov: row.fk_cod_prov
-                    });
-                }
-            }
+            }, req.headers);
         }
 
         logger.info('Commit de reserva a movimientos finalizado', { orderId });
@@ -89,4 +77,21 @@ const commitReservation = async (req, res) => {
     }
 };
 
-module.exports = { reserveInventory, commitReservation };
+const rollbackReservation = async (req, res) => {
+    const { orderId } = req.body;
+
+    if (!orderId) {
+        return res.status(400).json({ error: 'Se requiere orderId' });
+    }
+
+    try {
+        await redisService.releaseLock(orderId);
+        logger.info('Reserva liberada (rollback)', { orderId });
+        res.status(200).json({ message: 'Reserva liberada exitosamente.' });
+    } catch (e) {
+        logger.error('Error aplicando rollbackReservation', { error: e.message });
+        res.status(500).json({ error: 'Error del servidor liberando reserva.' });
+    }
+};
+
+module.exports = { reserveInventory, commitReservation, rollbackReservation };

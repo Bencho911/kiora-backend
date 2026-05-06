@@ -79,12 +79,12 @@ const createProduct = async (req, res, next) => {
 
     try {
         const result = await productRepository.create({
-            nom_prod, 
-            descrip_prod: descrip_prod || null, 
-            precio_unitario: Number(precio_unitario), 
-            fechaven_prod: fechaven_prod || null, 
-            fk_cod_cats: parsedCats, 
-            stock_actual: Number(stock_actual || 0), 
+            nom_prod,
+            descrip_prod: descrip_prod || null,
+            precio_unitario: Number(precio_unitario),
+            fechaven_prod: fechaven_prod || null,
+            fk_cod_cats: parsedCats,
+            stock_actual: Number(stock_actual || 0),
             stock_minimo: Number(stock_minimo || 0),
             url_imagen
         });
@@ -110,7 +110,7 @@ const updateProduct = async (req, res, next) => {
 
     try {
         const fields = { ...req.body };
-        
+
         if (req.file && req.file.path) {
             fields.url_imagen = req.file.path;
         }
@@ -207,6 +207,61 @@ const updateStock = async (req, res, next) => {
             logger.warn('ALERTA: Stock crítico', {
                 cod_prod: id, stock_actual: producto.stock_actual, stock_minimo: producto.stock_minimo,
             });
+
+            // Enviar notificación en tiempo real vía Redis Stream
+            const redisClient = cacheService.getRedis();
+            if (redisClient) {
+                const payload = JSON.stringify({
+                    to: process.env.ADMIN_EMAIL || 'admin@kiora.com',
+                    subject: '⚠️ Alerta: Stock Crítico (Actualización Directa)',
+                    html: `
+                        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f0eb; padding: 40px 20px; color: #333333;">
+                            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(61,26,16,0.12);">
+                                <div style="background-color: #3D1A10; padding: 28px 30px; text-align: center;">
+                                    <h1 style="color: #ffffff; font-size: 20px; font-weight: 900; margin: 0; letter-spacing: 1px;">KIORA INVENTORY SYSTEM</h1>
+                                </div>
+                                <div style="height: 4px; background: linear-gradient(to right, #C41E1E, #3D1A10);"></div>
+                                <div style="padding: 40px 36px;">
+                                    <h2 style="color: #3D1A10; font-size: 22px; margin-top: 0; margin-bottom: 16px;">Alerta de Actualización Directa</h2>
+                                    <p style="font-size: 15px; line-height: 1.6; color: #555555; margin-top: 0;">
+                                        Hola,<br><br>
+                                        Se ha detectado una modificación directa de stock que ha dejado el producto por debajo del nivel de seguridad configurado.
+                                    </p>
+                                    <div style="background-color: #fdf5f0; border-radius: 8px; border: 2px dashed #C41E1E; padding: 24px; margin: 24px 0;">
+                                        <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #3D1A10; font-weight: bold; text-transform: uppercase;">Producto:</td>
+                                                <td style="padding: 8px 0; text-align: right; font-weight: 900;">${producto.nom_prod}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #3D1A10; font-weight: bold; text-transform: uppercase;">Stock Actual:</td>
+                                                <td style="padding: 8px 0; text-align: right; color: #C41E1E; font-weight: 900; font-size: 18px;">${producto.stock_actual} unidades</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #3D1A10; font-weight: bold; text-transform: uppercase;">Mínimo:</td>
+                                                <td style="padding: 8px 0; text-align: right; font-weight: 500;">${producto.stock_minimo} unidades</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                    <p style="font-size: 14px; line-height: 1.5; color: #777777; font-style: italic; text-align: center;">
+                                        Por favor, verifique el motivo de este cambio y asegure el reabastecimiento si es necesario.
+                                    </p>
+                                    <hr style="border: none; border-top: 1px solid #eeeeee; margin: 32px 0;">
+                                    <p style="font-size: 12px; line-height: 1.5; color: #999999; margin-bottom: 0; text-align: center;">
+                                        Este es un correo automático de supervisión de Kiora. No respondas a este mensaje.
+                                    </p>
+                                </div>
+                                <div style="background-color: #3D1A10; padding: 14px 30px; text-align: center;">
+                                    <p style="color: #c8a898; font-size: 12px; margin: 0;">© ${new Date().getFullYear()} Kiora. Todos los derechos reservados.</p>
+                                </div>
+                            </div>
+                        </div>
+                    `
+                });
+                redisClient.xadd('kiora:notifications:stream', '*', 'payload', payload).catch(err => {
+                    logger.error('Error al enviar alerta a Redis', { error: err.message });
+                });
+            }
         }
 
         res.status(200).json({

@@ -63,7 +63,10 @@ const countAllMovements = (cod_prod) =>
 const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov }) =>
     db.query(
         `INSERT INTO Inventario (tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (fk_id_vent, cod_prod, tipo_mov) WHERE fk_id_vent IS NOT NULL
+         DO UPDATE SET cantidad = EXCLUDED.cantidad, desc_mov = EXCLUDED.desc_mov
+         RETURNING *`,
         [tipo_mov, fecha_mov || new Date(), cantidad, cod_prod, fk_cod_prov || null, fk_id_vent || null, desc_mov || null]
     );
 

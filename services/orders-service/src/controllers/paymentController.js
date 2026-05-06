@@ -7,13 +7,14 @@ const logger = require('../config/logger');
 
 const generateCheckoutParams = async (req, res) => {
     const { id } = req.params;
+    const { success_url, cancel_url } = req.body || {};
 
     try {
         const orden = await findByIdWithItems(id);
         if (!orden) {
             return res.status(404).json({ error: 'Orden no encontrada.' });
         }
-        
+
         if (orden.estado === 'pagado' || orden.estado === 'completada') {
             return res.status(400).json({ error: 'La orden ya está pagada o completada.' });
         }
@@ -30,7 +31,7 @@ const generateCheckoutParams = async (req, res) => {
             return res.status(409).json({ error: errData.error || 'Agotado o fallo reservando inventario temporalmente' });
         }
 
-        const url = await stripeService.createCheckoutSession(orden, orden.items);
+        const url = await stripeService.createCheckoutSession(orden, orden.items, success_url, cancel_url);
 
         res.status(200).json({
             status: 'ok',
@@ -73,7 +74,7 @@ const handleStripeWebhook = async (req, res) => {
                 body: JSON.stringify({ orderId })
             });
             logger.info('Commit formal enviado a Inventory Service', { orderId });
-            
+
         } catch (dbError) {
             logger.error('Error actualizando la orden post-webhook Stripe:', { dbError: dbError.message });
         }
