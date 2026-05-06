@@ -5,7 +5,7 @@ const invoiceRepository = require('../repositories/invoiceRepository');
 const logger = require('../config/logger');
 const env = require('../config/env');
 const { createCircuitBreaker } = require('../utils/circuitBreaker');
-const { outgoingHeaders, fetchWithRetry } = require('../utils/httpClient');
+const { outgoingHeaders, fetchWithRetry, DEFAULT_TIMEOUT_MS, NOTIFY_TIMEOUT_MS } = require('../utils/httpClient');
 
 /**
  * orderService
@@ -16,19 +16,27 @@ const { outgoingHeaders, fetchWithRetry } = require('../utils/httpClient');
 /* ── Circuit Breaker para inventory-service ──────────────────────────────── */
 
 async function _postInventoryMovement(url, body, headers) {
-    const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-        const errBody = await res.text();
-        const err = new Error(`Inventory responded with ${res.status}: ${errBody}`);
-        err.status = res.status;
-        err.body = errBody;
-        throw err;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+        if (!res.ok) {
+            const errBody = await res.text();
+            const err = new Error(`Inventory responded with ${res.status}: ${errBody}`);
+            err.status = res.status;
+            err.body = errBody;
+            throw err;
+        }
+        return res;
+    } finally {
+        clearTimeout(timer);
     }
-    return res;
 }
 
 const inventoryBreaker = createCircuitBreaker(
@@ -137,7 +145,7 @@ async function completeOrder(orderId, reqHeaders) {
                             desc_mov: `COMPENSACION SAGA: FALLO DE ORDEN #${orderId}`,
                         }),
                     },
-                    { maxRetries: 3 }
+                    { maxRetries: 3, timeoutMs: DEFAULT_TIMEOUT_MS }
                 );
                 logger.info('✅ SAGA: Producto devuelto', { cod_prod: reg.cod_prod });
             } catch (e) {
@@ -179,14 +187,18 @@ async function completeOrder(orderId, reqHeaders) {
     // ── Dashboard en tiempo real (Notificar vía WebSockets en API Gateway) ──
     try {
         const GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
-        await fetch(`${GATEWAY_URL}/api/internal/broadcast`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                event: 'new_sale',
-                payload: updatedOrder
-            })
-        });
+        await fetchWithRetry(
+            `${GATEWAY_URL}/api/internal/broadcast`,
+            {
+                method: 'POST',
+                headers: outgoingHeaders(reqHeaders),
+                body: JSON.stringify({
+                    event: 'new_sale',
+                    payload: updatedOrder
+                })
+            },
+            { maxRetries: 1, timeoutMs: NOTIFY_TIMEOUT_MS }
+        );
     } catch (wsErr) {
         logger.warn('No se pudo notificar nueva venta al Dashboard (WebSocket)', { error: wsErr.message });
     }
@@ -243,7 +255,8 @@ async function updateStatus(orderId, estado, reqHeaders) {
                             fk_id_vent: Number(orderId),
                             desc_mov: `REEMBOLSO: Venta #${orderId}`
                         })
-                    }
+                    },
+                    { maxRetries: 3, timeoutMs: DEFAULT_TIMEOUT_MS }
                 );
             } catch (err) {
                 logger.error('Error al devolver stock en reembolso', { orderId, cod_prod: item.cod_prod, error: err.message });

@@ -4,6 +4,7 @@ const stripeService = require('../services/stripeService');
 const { findByIdWithItems } = require('../repositories/orderRepository');
 const db = require('../config/db');
 const logger = require('../config/logger');
+const { outgoingHeaders, fetchWithRetry, DEFAULT_TIMEOUT_MS } = require('../utils/httpClient');
 
 const generateCheckoutParams = async (req, res) => {
     const { id } = req.params;
@@ -19,11 +20,20 @@ const generateCheckoutParams = async (req, res) => {
         }
 
         // ── LLAMADA SAGA: Solicitar Reserva a Inventory Service ──
-        const reserveRes = await fetch(process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId: orden.id_vent, items: orden.items })
-        });
+        const headers = outgoingHeaders(req.headers);
+        const reserveRes = await fetchWithRetry(
+            process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve',
+            {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ orderId: orden.id_vent, items: orden.items }),
+            },
+            {
+                maxRetries: 1,
+                timeoutMs: DEFAULT_TIMEOUT_MS,
+                onNonRetryable: (status) => status >= 400 && status < 500,
+            }
+        );
 
         if (!reserveRes.ok) {
             const errData = await reserveRes.json().catch(() => ({}));
@@ -67,11 +77,16 @@ const handleStripeWebhook = async (req, res) => {
             );
 
             // ── LLAMADA SAGA: Confirmar Reserva Permanentemente ──
-            await fetch(process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve/commit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ orderId })
-            });
+            const headers = outgoingHeaders(req.headers);
+            await fetchWithRetry(
+                process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve/commit',
+                {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ orderId }),
+                },
+                { maxRetries: 3, timeoutMs: DEFAULT_TIMEOUT_MS }
+            );
             logger.info('Commit formal enviado a Inventory Service', { orderId });
             
         } catch (dbError) {
