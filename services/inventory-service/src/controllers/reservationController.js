@@ -1,8 +1,6 @@
 'use strict';
 
-const db = require('../config/db');
 const redisService = require('../services/redisService');
-const inventoryRepository = require('../repositories/inventoryRepository');
 const inventoryService = require('../services/inventoryService');
 const env = require('../config/env');
 const logger = require('../config/logger');
