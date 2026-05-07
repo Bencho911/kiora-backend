@@ -1,7 +1,6 @@
 'use strict';
 
 const alertRepository = require('../repositories/alertRepository');
-const logger = require('../config/logger');
 
 const getAlerts = async (req, res, next) => {
     try {
