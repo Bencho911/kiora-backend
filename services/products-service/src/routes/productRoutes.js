@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../middlewares/uploadMiddleware');
+const parseFormData = require('../middlewares/parseFormData');
 const validate = require('../middlewares/validate');
 const { createProductSchema, updateProductSchema, updateStockSchema } = require('../validators/productValidators');
 const {
@@ -100,7 +101,7 @@ router.get('/:id', getProductById);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', upload.single('imagen'), validate(createProductSchema), createProduct);
+router.post('/', upload.single('imagen'), parseFormData, validate(createProductSchema), createProduct);
 
 /**
  * @swagger
@@ -135,7 +136,7 @@ router.post('/', upload.single('imagen'), validate(createProductSchema), createP
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id', upload.single('imagen'), validate(updateProductSchema), updateProduct);
+router.put('/:id', upload.single('imagen'), parseFormData, validate(updateProductSchema), updateProduct);
 
 /**
  * @swagger

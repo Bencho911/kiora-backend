@@ -79,12 +79,12 @@ const createProduct = async (req, res, next) => {
 
     try {
         const result = await productRepository.create({
-            nom_prod, 
-            descrip_prod: descrip_prod || null, 
-            precio_unitario: Number(precio_unitario), 
-            fechaven_prod: fechaven_prod || null, 
-            fk_cod_cats: parsedCats, 
-            stock_actual: Number(stock_actual || 0), 
+            nom_prod,
+            descrip_prod: descrip_prod || null,
+            precio_unitario: Number(precio_unitario),
+            fechaven_prod: fechaven_prod || null,
+            fk_cod_cats: parsedCats,
+            stock_actual: Number(stock_actual || 0),
             stock_minimo: Number(stock_minimo || 0),
             url_imagen
         });
@@ -110,7 +110,7 @@ const updateProduct = async (req, res, next) => {
 
     try {
         const fields = { ...req.body };
-        
+
         if (req.file && req.file.path) {
             fields.url_imagen = req.file.path;
         }
@@ -207,6 +207,23 @@ const updateStock = async (req, res, next) => {
             logger.warn('ALERTA: Stock crítico', {
                 cod_prod: id, stock_actual: producto.stock_actual, stock_minimo: producto.stock_minimo,
             });
+
+            // Enviar notificación en tiempo real vía Redis Stream (payload JSON estructurado)
+            const redisClient = cacheService.getRedis();
+            if (redisClient) {
+                const payload = JSON.stringify({
+                    to: process.env.ADMIN_EMAIL || 'admin@kiora.com',
+                    subject: '⚠️ Alerta: Stock Crítico (Actualización Directa)',
+                    event_type: 'CRITICAL_STOCK_UPDATE',
+                    cod_prod: id,
+                    nom_prod: producto.nom_prod,
+                    stock_actual: producto.stock_actual,
+                    stock_minimo: producto.stock_minimo
+                });
+                redisClient.xadd('kiora:notifications:stream', '*', 'payload', payload).catch(err => {
+                    logger.error('Error al enviar alerta a Redis', { error: err.message });
+                });
+            }
         }
 
         res.status(200).json({

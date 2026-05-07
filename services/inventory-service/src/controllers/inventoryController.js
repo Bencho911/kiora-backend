@@ -199,7 +199,7 @@ const upsertSuministra = async (req, res, next) => {
 
         logger.info('Suministra actualizado', { id: row.id, cod_prod, stock: row.stock });
 
-        const lowStock = row.stock < row.stock_minimo;
+        const lowStock = row.stock <= row.stock_minimo;
         if (lowStock) {
             await directEmailService.sendLowStockEmail({
                 cod_prod: row.cod_prod,

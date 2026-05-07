@@ -57,7 +57,7 @@ async function registerMovement(movementData, reqHeaders) {
     const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento } = movementData;
 
     // Delta único: se usa tanto para Suministra como para products-service
-    const stockDelta = tipo_mov === 'entrada' ? Number(cantidad) : -Number(cantidad);
+    const stockDelta = (tipo_mov === 'entrada' || tipo_mov === 'ajuste') ? Number(cantidad) : -Number(cantidad);
 
     // 1. Guardar historial en tabla Inventario
     const result = await inventoryRepository.createMovement({
@@ -73,7 +73,7 @@ async function registerMovement(movementData, reqHeaders) {
         
         if (stockRes && stockRes.rows.length > 0) {
             const row = stockRes.rows[0];
-            if (row.stock < row.stock_minimo) {
+            if (row.stock <= row.stock_minimo) {
                 logger.warn('Stock bajo detectado. Enviando alerta...', { cod_prod, stock: row.stock });
                 
                 await directEmailService.sendLowStockEmail({

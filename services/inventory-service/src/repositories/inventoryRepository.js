@@ -60,11 +60,14 @@ const countAllMovements = (cod_prod) =>
         ? db.query('SELECT COUNT(*) FROM Inventario WHERE cod_prod = $1', [cod_prod])
         : db.query('SELECT COUNT(*) FROM Inventario');
 
-const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento }) =>
+const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov }) =>
     db.query(
-        `INSERT INTO Inventario (tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-        [tipo_mov, fecha_mov || new Date(), cantidad, cod_prod, fk_cod_prov || null, fk_id_vent || null, desc_mov || null, fecha_vencimiento || null]
+        `INSERT INTO Inventario (tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (fk_id_vent, cod_prod, tipo_mov) WHERE fk_id_vent IS NOT NULL
+         DO UPDATE SET cantidad = EXCLUDED.cantidad, desc_mov = EXCLUDED.desc_mov
+         RETURNING *`,
+        [tipo_mov, fecha_mov || new Date(), cantidad, cod_prod, fk_cod_prov || null, fk_id_vent || null, desc_mov || null]
     );
 
 /* ── Suministra (proveedor ↔ producto + stock) ───────────────────────────── */

@@ -4,6 +4,7 @@ const orderRepository = require('../repositories/orderRepository');
 const invoiceRepository = require('../repositories/invoiceRepository');
 const db = require('../config/db');
 const logger = require('../config/logger');
+const env = require('../config/env');
 const { outgoingHeaders, fetchWithRetry, NOTIFY_TIMEOUT_MS } = require('../utils/httpClient');
 
 /**
@@ -165,63 +166,49 @@ async function updateStatus(orderId, estado, reqHeaders) {
 
     // Regla: Si la venta ya está reembolsada, es un estado FINAL.
     if (order.estado === 'reembolsada') {
-        return { 
-            error: 'Esta venta ya ha sido reembolsada; no se puede volver a cambiar su estado.', 
-            status: 400 
+        return {
+            error: 'Esta venta ya ha sido reembolsada; no se puede volver a cambiar su estado.',
+            status: 400
         };
     }
 
     // Regla de Negocio: Solo permitir reembolso si la venta estaba completada
     if (estado === 'reembolsada' && order.estado !== 'completada') {
-        return { 
-            error: 'Solo se pueden reembolsar ventas que ya estén marcadas como "completada".', 
-            status: 400 
+        return {
+            error: 'Solo se pueden reembolsar ventas que ya estén marcadas como "completada".',
+            status: 400
         };
     }
 
     // ── Reembolso: transacción atómica con Outbox ──
     if (estado === 'reembolsada') {
-        logger.info('Procesando reembolso vía Outbox', { orderId });
+        logger.info('Procesando reembolso de inventario', { orderId });
+        const headers = outgoingHeaders(reqHeaders);
 
-        const client = await db.connect();
-        try {
-            await client.query('BEGIN');
-
-            // 1. Marcar venta como reembolsada
-            await orderRepository.updateStatus(orderId, 'reembolsada', client);
-
-            // 2. Insertar eventos outbox de entrada (devolver stock) por cada ítem
-            for (const item of order.items) {
-                await orderRepository.insertOutboxEvent(
-                    'inventory.movement',
+        for (const item of order.items) {
+            try {
+                await fetchWithRetry(
+                    `${env.inventoryServiceUrl}/api/inventory/movements`,
                     {
-                        tipo_mov: 'entrada',
-                        cantidad: item.cantidad,
-                        cod_prod: item.cod_prod,
-                        fk_id_vent: Number(orderId),
-                        desc_mov: `REEMBOLSO: Venta #${orderId}`,
-                    },
-                    client
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({
+                            tipo_mov: 'entrada',
+                            cantidad: item.cantidad,
+                            cod_prod: item.cod_prod,
+                            fk_id_vent: Number(orderId),
+                            desc_mov: `REEMBOLSO: Venta #${orderId}`
+                        })
+                    }
                 );
+            } catch (err) {
+                logger.error('Error al devolver stock en reembolso', { orderId, cod_prod: item.cod_prod, error: err.message });
             }
-
-            await client.query('COMMIT');
-            logger.info('Transacción Outbox de reembolso completada', {
-                orderId, outboxEvents: order.items.length,
-            });
-        } catch (err) {
-            await client.query('ROLLBACK');
-            logger.error('Error en transacción Outbox de reembolso', {
-                orderId, error: err.message,
-            });
-            throw err;
-        } finally {
-            client.release();
         }
 
-        const updated = await orderRepository.findByIdWithItems(orderId);
+        const updated = await orderRepository.updateStatus(orderId, estado);
         logger.info('Estado de venta actualizado', { id_vent: orderId, estado: 'reembolsada' });
-        return { ok: true, data: updated };
+        return { ok: true, data: updated.rows[0] };
     }
 
     // ── Otros estados (cancelada, etc.) — sin outbox ──
