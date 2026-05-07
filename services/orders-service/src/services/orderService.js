@@ -4,6 +4,7 @@ const orderRepository = require('../repositories/orderRepository');
 const invoiceRepository = require('../repositories/invoiceRepository');
 const db = require('../config/db');
 const logger = require('../config/logger');
+const env = require('../config/env');
 const { outgoingHeaders, fetchWithRetry, NOTIFY_TIMEOUT_MS } = require('../utils/httpClient');
 
 /**
@@ -189,33 +190,25 @@ async function updateStatus(orderId, estado, reqHeaders) {
                 await fetchWithRetry(
                     `${env.inventoryServiceUrl}/api/inventory/movements`,
                     {
-                        tipo_mov: 'entrada',
-                        cantidad: item.cantidad,
-                        cod_prod: item.cod_prod,
-                        fk_id_vent: Number(orderId),
-                        desc_mov: `REEMBOLSO: Venta #${orderId}`,
-                    },
-                    client
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({
+                            tipo_mov: 'entrada',
+                            cantidad: item.cantidad,
+                            cod_prod: item.cod_prod,
+                            fk_id_vent: Number(orderId),
+                            desc_mov: `REEMBOLSO: Venta #${orderId}`
+                        })
+                    }
                 );
+            } catch (err) {
+                logger.error('Error al devolver stock en reembolso', { orderId, cod_prod: item.cod_prod, error: err.message });
             }
-
-            await client.query('COMMIT');
-            logger.info('Transacción Outbox de reembolso completada', {
-                orderId, outboxEvents: order.items.length,
-            });
-        } catch (err) {
-            await client.query('ROLLBACK');
-            logger.error('Error en transacción Outbox de reembolso', {
-                orderId, error: err.message,
-            });
-            throw err;
-        } finally {
-            client.release();
         }
 
-        const updated = await orderRepository.findByIdWithItems(orderId);
+        const updated = await orderRepository.updateStatus(orderId, estado);
         logger.info('Estado de venta actualizado', { id_vent: orderId, estado: 'reembolsada' });
-        return { ok: true, data: updated };
+        return { ok: true, data: updated.rows[0] };
     }
 
     // ── Otros estados (cancelada, etc.) — sin outbox ──

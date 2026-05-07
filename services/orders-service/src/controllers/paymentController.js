@@ -2,7 +2,6 @@
 
 const stripeService = require('../services/stripeService');
 const { findByIdWithItems } = require('../repositories/orderRepository');
-const { insertOutboxEvent } = require('../repositories/orderRepository');
 const db = require('../config/db');
 const logger = require('../config/logger');
 const { outgoingHeaders, fetchWithRetry, DEFAULT_TIMEOUT_MS } = require('../utils/httpClient');

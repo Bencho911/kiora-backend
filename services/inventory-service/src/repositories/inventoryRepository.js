@@ -60,7 +60,7 @@ const countAllMovements = (cod_prod) =>
         ? db.query('SELECT COUNT(*) FROM Inventario WHERE cod_prod = $1', [cod_prod])
         : db.query('SELECT COUNT(*) FROM Inventario');
 
-const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento }) =>
+const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov }) =>
     db.query(
         `INSERT INTO Inventario (tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
