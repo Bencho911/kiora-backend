@@ -3,12 +3,13 @@
 /**
  * Tests de contrato ligeros (orders-service → inventory-service).
  *
- * Verifica que:
- * - completeOrder() llama la ruta correcta: POST /api/inventory/movements
- * - El body enviado tiene el schema esperado: { tipo_mov, cantidad, cod_prod, fk_id_vent, desc_mov }
- * - Se propaga x-correlation-id en los headers
+ * Fase 5: Los contratos ahora validan inserciones en la tabla outbox_events
+ * en lugar de llamadas HTTP directas, ya que la comunicación es asíncrona.
  *
- * Si cambia la ruta o el body schema, este test falla → te avisa que rompiste un contrato.
+ * Verifica que:
+ * - completeOrder() inserta eventos outbox con el schema correcto
+ * - El evento tiene tipo 'inventory.movement' y payload con los campos requeridos
+ * - completeOrder() envía broadcast al gateway (sigue siendo síncrono)
  */
 
 process.env.NODE_ENV = 'test';
@@ -21,6 +22,7 @@ process.env.INVENTORY_SERVICE_URL = 'http://inventory:3003';
 
 jest.mock('../config/db', () => ({
     query: jest.fn(),
+    connect: jest.fn(),
 }));
 
 jest.mock('../repositories/orderRepository');
@@ -28,29 +30,16 @@ jest.mock('../repositories/invoiceRepository');
 
 const originalFetch = global.fetch;
 
-describe('contracts: orders → inventory', () => {
-    let fetchCalls;
-
+describe('contracts: orders → inventory (Outbox)', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        fetchCalls = [];
-
-        global.fetch = jest.fn().mockImplementation((url, opts) => {
-            fetchCalls.push({ url, opts });
-            return Promise.resolve({
-                ok: true,
-                status: 200,
-                json: async () => ({ id_mov: 1 }),
-                text: async () => '{}',
-            });
-        });
     });
 
     afterEach(() => {
         global.fetch = originalFetch;
     });
 
-    test('completeOrder() llama POST /api/inventory/movements con schema correcto', async () => {
+    test('completeOrder() inserta eventos outbox con schema correcto (no HTTP directo)', async () => {
         jest.resetModules();
 
         process.env.NODE_ENV = 'test';
@@ -61,9 +50,17 @@ describe('contracts: orders → inventory', () => {
         process.env.DB_NAME = 'test';
         process.env.INVENTORY_SERVICE_URL = 'http://inventory:3003';
 
+        // Mockear db con transacción
+        const mockClient = {
+            query: jest.fn().mockResolvedValue({ rows: [] }),
+            release: jest.fn(),
+        };
+
         jest.mock('../config/db', () => ({
             query: jest.fn(),
+            connect: jest.fn().mockResolvedValue(mockClient),
         }));
+
         jest.mock('../repositories/orderRepository');
         jest.mock('../repositories/invoiceRepository');
 
@@ -84,52 +81,52 @@ describe('contracts: orders → inventory', () => {
             rows: [{ id_vent: 42, estado: 'completada', montofinal_vent: 500 }],
         });
 
+        orderRepo.insertOutboxEvent.mockResolvedValue({
+            rows: [{ id: 1 }],
+        });
+
         invoiceRepo.create.mockResolvedValue({ rows: [{ id_fact: 1 }] });
 
-        const localFetchCalls = [];
-        global.fetch = jest.fn().mockImplementation((url, opts) => {
-            localFetchCalls.push({ url, opts });
-            return Promise.resolve({
-                ok: true,
-                status: 200,
-                json: async () => ({ id_mov: 1 }),
-                text: async () => '{}',
-            });
+        // Mock fetch para broadcast (fire & forget)
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => ({}),
+            text: async () => '{}',
         });
 
         const { completeOrder } = require('../services/orderService');
 
-        const reqHeaders = { 'x-correlation-id': 'corr-test-123' };
-        const result = await completeOrder(42, reqHeaders);
-
+        const result = await completeOrder(42, { 'x-correlation-id': 'corr-123' });
         expect(result.ok).toBe(true);
 
-        // Verificar que las llamadas a inventory usan la ruta correcta
-        const inventoryCalls = localFetchCalls.filter(c =>
-            c.url.includes('/api/inventory/movements')
-        );
+        // Verificar que se usó transacción
+        expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
+        expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
 
-        expect(inventoryCalls.length).toBe(2); // Una por cada item
+        // Verificar que se insertaron eventos outbox (uno por ítem)
+        expect(orderRepo.insertOutboxEvent).toHaveBeenCalledTimes(2);
 
-        // Verificar el schema del body de la primera llamada
-        const firstCallBody = JSON.parse(inventoryCalls[0].opts.body);
-        expect(firstCallBody).toEqual(expect.objectContaining({
+        // Verificar schema del primer evento outbox
+        const firstCall = orderRepo.insertOutboxEvent.mock.calls[0];
+        expect(firstCall[0]).toBe('inventory.movement'); // event_type
+        expect(firstCall[1]).toEqual(expect.objectContaining({
             tipo_mov: 'salida',
             cantidad: 2,
             cod_prod: 'PROD-001',
             fk_id_vent: 42,
             desc_mov: expect.stringContaining('Venta #42'),
         }));
+        expect(firstCall[2]).toBe(mockClient); // Usa el cliente de transacción
 
-        // Verificar ruta exacta
-        expect(inventoryCalls[0].url).toBe('http://inventory:3003/api/inventory/movements');
-
-        // Verificar que se propagó x-correlation-id
-        const sentHeaders = inventoryCalls[0].opts.headers;
-        expect(sentHeaders['x-correlation-id']).toBe('corr-test-123');
+        // Verificar que NO se hicieron llamadas HTTP directas a inventory
+        const inventoryFetchCalls = global.fetch.mock.calls.filter(
+            ([url]) => url.includes('/api/inventory/movements')
+        );
+        expect(inventoryFetchCalls).toHaveLength(0);
     });
 
-    test('completeOrder() envía broadcast a gateway con schema correcto', async () => {
+    test('completeOrder() envía broadcast al gateway después del COMMIT', async () => {
         jest.resetModules();
 
         process.env.NODE_ENV = 'test';
@@ -138,12 +135,18 @@ describe('contracts: orders → inventory', () => {
         process.env.DB_HOST = 'localhost';
         process.env.DB_PORT = '5432';
         process.env.DB_NAME = 'test';
-        process.env.INVENTORY_SERVICE_URL = 'http://inventory:3003';
         process.env.API_GATEWAY_URL = 'http://gateway:3000';
+
+        const mockClient = {
+            query: jest.fn().mockResolvedValue({ rows: [] }),
+            release: jest.fn(),
+        };
 
         jest.mock('../config/db', () => ({
             query: jest.fn(),
+            connect: jest.fn().mockResolvedValue(mockClient),
         }));
+
         jest.mock('../repositories/orderRepository');
         jest.mock('../repositories/invoiceRepository');
 
@@ -161,25 +164,25 @@ describe('contracts: orders → inventory', () => {
             rows: [{ id_vent: 42, estado: 'completada', montofinal_vent: 500 }],
         });
 
+        orderRepo.insertOutboxEvent.mockResolvedValue({ rows: [{ id: 1 }] });
         invoiceRepo.create.mockResolvedValue({ rows: [{ id_fact: 1 }] });
 
-        const localFetchCalls = [];
+        const fetchCalls = [];
         global.fetch = jest.fn().mockImplementation((url, opts) => {
-            localFetchCalls.push({ url, opts });
+            fetchCalls.push({ url, opts });
             return Promise.resolve({
                 ok: true,
                 status: 200,
-                json: async () => ({ id_mov: 1 }),
+                json: async () => ({}),
                 text: async () => '{}',
             });
         });
 
         const { completeOrder } = require('../services/orderService');
-
         await completeOrder(42, {});
 
         // Buscar la llamada a broadcast
-        const broadcastCalls = localFetchCalls.filter(c =>
+        const broadcastCalls = fetchCalls.filter(c =>
             c.url.includes('/api/internal/broadcast')
         );
 
