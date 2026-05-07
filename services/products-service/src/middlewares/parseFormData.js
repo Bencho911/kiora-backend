@@ -15,9 +15,7 @@ const parseFormData = (req, _res, next) => {
                 ? parsed.map(Number)
                 : [Number(parsed)];
         } catch {
-            // Si no es JSON válido, intentamos tratarlo como un número suelto
-            const n = Number(req.body.fk_cod_cats);
-            req.body.fk_cod_cats = isNaN(n) ? [] : [n];
+            // No mutar si falla. Dejar que Joi lo detecte como tipo inválido y lance un 400 Bad Request.
         }
     }
     next();
