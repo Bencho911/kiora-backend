@@ -43,6 +43,7 @@ const createMovementSchema = Joi.object({
     fecha_mov: Joi.date().iso().allow(null).optional(),
     fk_cod_prov: Joi.number().integer().allow(null).optional(),
     fk_id_vent: Joi.number().integer().allow(null).optional(),
+    fecha_vencimiento: Joi.date().iso().allow(null).optional(),
     desc_mov: Joi.string().max(255).required().messages({
         'any.required': 'La justificación (desc_mov) es obligatoria.',
         'string.empty': 'La justificación no puede estar vacía.',

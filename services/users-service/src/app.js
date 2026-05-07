@@ -33,6 +33,10 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json());
 
+// ── Correlation ID (AsyncLocalStorage) — DEBE IR ANTES de cualquier ruta ──
+const correlationMiddleware = require('./middlewares/correlationMiddleware');
+app.use(correlationMiddleware);
+
 // ── Health check (liveness: proceso vivo) ─────────────────────────────────
 app.get('/api/users/health', (req, res) => {
     res.status(200).json({ status: 'OK', message: 'Users Service Kiora está corriendo' });
