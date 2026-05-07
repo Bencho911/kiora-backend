@@ -10,6 +10,20 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 
+// ── Correlation ID (AsyncLocalStorage) — DEBE IR ANTES de cualquier ruta ──
+const correlationMiddleware = require('./middlewares/correlationMiddleware');
+app.use(correlationMiddleware);
+
+// ── Rutas ─────────────────────────────────────────────────────────────────
+const alertRoutes = require('./routes/alertRoutes');
+app.use('/api/notifications/alerts', alertRoutes);
+
+// ── Swagger ───────────────────────────────────────────────────────────────
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger');
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
+
 // ── Health-check ──────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({
     status: 'ok',

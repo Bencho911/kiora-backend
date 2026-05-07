@@ -31,9 +31,16 @@ Cada servicio es **autónomo**: tiene su propia base de datos, migraciones, Dock
 
 Entrada recomendada para el front: proxifica `/api/auth`, `/api/users`, `/api/products`, `/api/categories`, `/api/inventory`, `/api/orders`, `/api/invoices`, `/api/notifications` hacia cada microservicio. Expone `GET /health`, `GET /health/all` y Swagger unificado en `/api/docs`. Variables: `USERS_SERVICE_URL`, `PRODUCTS_SERVICE_URL`, `INVENTORY_SERVICE_URL`, `ORDERS_SERVICE_URL`, `NOTIFICATIONS_SERVICE_URL`, `PORT`, `CORS_ORIGIN`. Local: `cd services/api-gateway && npm install && npm run dev`.
 
-Genera o respeta **`x-correlation-id`** (también acepta **`x-request-id`** del cliente) y lo reenvía a los servicios detrás del proxy.
+3. Genera o respeta **`x-correlation-id`** (también acepta **`x-request-id`** del cliente) y lo reenvía a los servicios detrás del proxy.
 
-Contratos HTTP entre servicios: [docs/INTER_SERVICE_CONTRACTS.md](docs/INTER_SERVICE_CONTRACTS.md).
+### 📚 Documentación de Arquitectura y Resiliencia
+
+El backend está diseñado para soportar fallos parciales sin interrumpir el negocio. Consulta los siguientes documentos de diseño:
+
+- 📄 **[Contratos e Integración (Síncrona y Asíncrona)](docs/INTER_SERVICE_CONTRACTS.md)**: URLs, responsabilidades y comunicación HTTP/Outbox entre servicios.
+- 🛡️ **[Matriz de Degradación (Operaciones)](docs/DEGRADATION_MATRIX.md)**: Guía de qué ocurre cuando un microservicio cae y cómo el sistema se recupera (sagas/compensaciones automáticas).
+- 🚀 **[Estado de Producción y Roadmap](docs/PRODUCTION_READINESS.md)**: Nivel de madurez técnica de cada servicio (Production-Ready, Beta, Experimental).
+- 🔑 **[Inventario de Secretos](docs/SECRETS_INVENTORY.md)**: Gobernanza de variables de entorno y credenciales sensibles.
 
 ---
 

@@ -10,6 +10,10 @@ app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:3000', credentials: true }));
 app.use(express.json());
 
+// ── Correlation ID (AsyncLocalStorage) — DEBE IR ANTES de cualquier ruta ──
+const correlationMiddleware = require('./middlewares/correlationMiddleware');
+app.use(correlationMiddleware);
+
 // Health Check
 app.get('/api/reports/health', (req, res) => res.status(200).json({ status: 'OK' }));
 
@@ -19,6 +23,7 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 }));
 app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 
+app.use('/api/reports/electronic-invoice', require('./routes/electronicInvoiceRoutes'));
 app.use('/api/reports', reportRoutes);
 
 module.exports = app;

@@ -1,8 +1,10 @@
 'use strict';
 
+const crypto = require('crypto');
 const db = require('../config/db');
 const logger = require('../config/logger');
 const env = require('../config/env');
+const asyncContext = require('../utils/asyncContext');
 const { fetchWithRetry, DEFAULT_TIMEOUT_MS, NOTIFY_TIMEOUT_MS, outgoingHeaders } = require('../utils/httpClient');
 const stripeService = require('./stripeService');
 const orderRepository = require('../repositories/orderRepository');
@@ -205,6 +207,10 @@ async function compensateOrder(orderId, reason) {
  * Ejecuta un ciclo de polling con retry inteligente.
  */
 async function pollOnce() {
+    // Envolver cada ciclo de polling en AsyncLocalStorage con un UUID único
+    // para que los logs del poller sean trazables
+    const store = new Map([['correlationId', `poller-${crypto.randomUUID().slice(0, 8)}`]]);
+    return asyncContext.run(store, async () => {
     try {
         metrics.pollCycles++;
 
@@ -292,6 +298,7 @@ async function pollOnce() {
     } catch (err) {
         logger.error('Outbox poller: error en ciclo de polling', { error: err.message });
     }
+    }); // asyncContext.run
 }
 
 /**
