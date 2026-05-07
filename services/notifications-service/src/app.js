@@ -10,6 +10,10 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 
+// ── Rutas ─────────────────────────────────────────────────────────────────
+const alertRoutes = require('./routes/alertRoutes');
+app.use('/api/notifications/alerts', alertRoutes);
+
 // ── Health-check ──────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({
     status: 'ok',

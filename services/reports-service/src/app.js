@@ -19,6 +19,7 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 }));
 app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 
+app.use('/api/reports/electronic-invoice', require('./routes/electronicInvoiceRoutes'));
 app.use('/api/reports', reportRoutes);
 
 module.exports = app;

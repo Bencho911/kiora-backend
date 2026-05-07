@@ -54,21 +54,21 @@ const productsBreaker = createCircuitBreaker(
  * @param {Object} reqHeaders - Encabezados originales para propagar
  */
 async function registerMovement(movementData, reqHeaders) {
-    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov } = movementData;
+    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento } = movementData;
 
     // Delta único: se usa tanto para Suministra como para products-service
     const stockDelta = tipo_mov === 'entrada' ? Number(cantidad) : -Number(cantidad);
 
     // 1. Guardar historial en tabla Inventario
     const result = await inventoryRepository.createMovement({
-        tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov
+        tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento
     });
     const movement = result.rows[0];
     logger.info('Movimiento registrado', { id_mov: movement.id_mov, tipo_mov, cod_prod });
 
     // 2. Actualizar stock en Suministra + verificar alertas
     try {
-        const stockRes = await inventoryRepository.updateStock(cod_prod, stockDelta, fk_cod_prov);
+        const stockRes = await inventoryRepository.updateStock(cod_prod, stockDelta, fk_cod_prov, fecha_vencimiento);
         
         if (stockRes && stockRes.rows.length > 0) {
             const row = stockRes.rows[0];

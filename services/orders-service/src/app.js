@@ -57,6 +57,7 @@ app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
 app.use('/api/orders/checkout', require('./routes/paymentRoutes'));
 app.use('/api/orders/export',   require('./routes/exportRoutes'));
+app.use('/api/orders/settlement', require('./routes/settlementRoutes'));
 app.use('/api/orders',          require('./routes/orderRoutes'));
 
 // eslint-disable-next-line no-unused-vars

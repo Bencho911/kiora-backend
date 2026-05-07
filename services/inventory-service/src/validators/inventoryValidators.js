@@ -47,6 +47,7 @@ const createMovementSchema = Joi.object({
         'any.required': 'La justificación (desc_mov) es obligatoria.',
         'string.empty': 'La justificación no puede estar vacía.',
     }),
+    fecha_vencimiento: Joi.date().iso().allow(null).optional(),
 });
 
 const upsertSuministraSchema = Joi.object({

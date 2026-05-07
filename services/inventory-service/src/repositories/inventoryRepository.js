@@ -60,11 +60,11 @@ const countAllMovements = (cod_prod) =>
         ? db.query('SELECT COUNT(*) FROM Inventario WHERE cod_prod = $1', [cod_prod])
         : db.query('SELECT COUNT(*) FROM Inventario');
 
-const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov }) =>
+const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento }) =>
     db.query(
-        `INSERT INTO Inventario (tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [tipo_mov, fecha_mov || new Date(), cantidad, cod_prod, fk_cod_prov || null, fk_id_vent || null, desc_mov || null]
+        `INSERT INTO Inventario (tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [tipo_mov, fecha_mov || new Date(), cantidad, cod_prod, fk_cod_prov || null, fk_id_vent || null, desc_mov || null, fecha_vencimiento || null]
     );
 
 /* ── Suministra (proveedor ↔ producto + stock) ───────────────────────────── */
@@ -89,17 +89,23 @@ const findSuministraById = (id) =>
  * Actualiza el stock sumando o restando un delta.
  * Si no se especifica proveedor, se intenta actualizar el primer registro encontrado para el producto.
  */
-const updateStock = (cod_prod, delta, fk_cod_prov = null) => {
-    if (fk_cod_prov) {
-        return db.query(
-            'UPDATE Suministra SET stock = stock + $1 WHERE cod_prod = $2 AND fk_cod_prov = $3 RETURNING *',
-            [delta, cod_prod, fk_cod_prov]
-        );
+const updateStock = (cod_prod, delta, fk_cod_prov = null, fecha_vencimiento = null) => {
+    let query = `UPDATE Suministra SET stock = stock + $1`;
+    const params = [delta, cod_prod];
+
+    if (fecha_vencimiento && delta > 0) {
+        query += `, fecha_vencimiento = $3`;
+        params.push(fecha_vencimiento);
     }
-    return db.query(
-        'UPDATE Suministra SET stock = stock + $1 WHERE id = (SELECT id FROM Suministra WHERE cod_prod = $2 LIMIT 1) RETURNING *',
-        [delta, cod_prod]
-    );
+
+    if (fk_cod_prov) {
+        query += ` WHERE cod_prod = $2 AND fk_cod_prov = $${params.length + 1} RETURNING *`;
+        params.push(fk_cod_prov);
+    } else {
+        query += ` WHERE id = (SELECT id FROM Suministra WHERE cod_prod = $2 LIMIT 1) RETURNING *`;
+    }
+
+    return db.query(query, params);
 };
 
 /**
