@@ -34,9 +34,10 @@ const findByVenta = (fk_id_vent) =>
 /**
  * Emite una factura para una venta existente.
  * @param {{ fk_id_vent, id_usu, cantidad_vent, precio_prod, montototal_vent }} data
+ * @param {object} [client=db] — Cliente PG de una transacción activa (opcional)
  */
-const create = ({ fk_id_vent, id_usu, cantidad_vent, precio_prod, montototal_vent }) =>
-    db.query(
+const create = ({ fk_id_vent, id_usu, cantidad_vent, precio_prod, montototal_vent }, client = db) =>
+    client.query(
         `INSERT INTO Factura (fk_id_vent, id_usu, cantidad_vent, precio_prod, montototal_vent)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
         [fk_id_vent, id_usu, cantidad_vent, precio_prod, montototal_vent]

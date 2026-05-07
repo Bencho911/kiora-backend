@@ -3,6 +3,7 @@
 const Redis   = require('ioredis');
 const logger  = require('../config/logger');
 const { sendEmail } = require('../services/emailService');
+const alertRepository = require('../repositories/alertRepository');
 
 /**
  * Suscribe al stream Redis de notificaciones usando XREADGROUP
@@ -80,6 +81,21 @@ function startSubscriber(redisConfig, from) {
         }
 
         try {
+            // Guardar en la Base de Datos para el historial del UI
+            // Determinamos el tipo basándonos en el subject
+            let tipo = 'general';
+            if (payload.subject && payload.subject.toLowerCase().includes('stock')) {
+                tipo = 'stock_bajo';
+            } else if (payload.subject && payload.subject.toLowerCase().includes('vencimiento')) {
+                tipo = 'vencimiento';
+            }
+            
+            await alertRepository.saveAlert({
+                tipo,
+                mensaje: payload.subject || 'Nueva notificación',
+                metadata: payload
+            });
+
             await sendEmail(payload, from);
             await redis.xack(stream, group, messageId);
             logger.debug('Mensaje procesado y ACK', { messageId, to: payload.to });
@@ -124,7 +140,8 @@ function startSubscriber(redisConfig, from) {
         // Primero, procesar mensajes pendientes
         await processPending();
 
-        while (true) {
+        // Bucle de consumo continuo (XREADGROUP + BLOCK)
+        for (;;) {
             try {
                 const result = await redis.xreadgroup(
                     'GROUP', group, consumer,

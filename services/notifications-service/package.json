@@ -7,8 +7,13 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "test": "jest --runInBand",
+    "audit:ci": "npm audit --audit-level=high",
     "lint": "eslint src --max-warnings 0",
-    "lint:fix": "eslint src --fix --max-warnings 0"
+    "lint:fix": "eslint src --fix --max-warnings 0",
+    "migrate": "node-pg-migrate -j sql -d src/db/migrations",
+    "migrate:up": "npm run migrate up",
+    "migrate:down": "npm run migrate down",
+    "migrate:up:docker": "DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@${DB_HOST:-notifications-db}:${DB_PORT:-5432}/${DB_NAME:-kiora_notifications} npm run migrate up"
   },
   "keywords": [],
   "author": "",
@@ -21,7 +26,11 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.10.0",
     "joi": "^18.0.2",
+    "node-pg-migrate": "^8.0.4",
     "nodemailer": "^8.0.3",
+    "pg": "^8.20.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "winston": "^3.19.0"
   },
   "devDependencies": {

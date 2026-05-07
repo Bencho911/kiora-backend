@@ -102,10 +102,11 @@ const insertOutboxEvent = async (eventType, payload, client) => {
 /**
  * Cambia el estado de una venta.
  * @param {number} id_vent
- * @param {string} estado — 'pendiente' | 'completada' | 'cancelada'
+ * @param {string} estado — 'pendiente' | 'completada' | 'cancelada' | 'reembolsada'
+ * @param {object} [client=db] — Cliente PG de una transacción activa (opcional)
  */
-const updateStatus = (id_vent, estado) =>
-    db.query(
+const updateStatus = (id_vent, estado, client = db) =>
+    client.query(
         'UPDATE Ventas SET estado = $1 WHERE id_vent = $2 RETURNING *',
         [estado, id_vent]
     );

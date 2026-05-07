@@ -54,6 +54,33 @@ const createCheckoutSession = async (order, items, successUrl = null, cancelUrl 
 };
 
 /**
+ * Emite un reembolso en Stripe para un payment_intent dado.
+ *
+ * @param {string} paymentIntentId — El ID del payment_intent (ej: 'pi_3Mxxxxxx')
+ * @returns {Promise<Object>} El objeto refund de Stripe
+ */
+const createRefund = async (paymentIntentId) => {
+    try {
+        const refund = await getStripe().refunds.create({
+            payment_intent: paymentIntentId,
+        });
+        logger.info('Stripe: Reembolso emitido', {
+            refundId: refund.id,
+            paymentIntentId,
+            amount: refund.amount,
+            status: refund.status,
+        });
+        return refund;
+    } catch (error) {
+        logger.error('Error emitiendo reembolso Stripe:', {
+            paymentIntentId,
+            error: error.message,
+        });
+        throw error;
+    }
+};
+
+/**
  * Valida que el webhook entrante haya sido realmente enviado por Stripe.
  *
  * @param {Buffer} rawBody El body crudo (raw buffer) del Request
@@ -72,5 +99,6 @@ const verifyWebhookSignature = (rawBody, signature) => {
 
 module.exports = {
     createCheckoutSession,
+    createRefund,
     verifyWebhookSignature,
 };
