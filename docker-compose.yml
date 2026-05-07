@@ -66,6 +66,26 @@ services:
       timeout: 5s
       retries: 5
 
+  notifications-db:
+    image: postgres:16-alpine
+    container_name: kiora_notifications_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      POSTGRES_DB: kiora_notifications
+    ports:
+      - "5437:5432"
+    networks:
+      - kiora-backend-net
+    volumes:
+      - notifications_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_notifications"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   orders-db:
     image: postgres:16-alpine
     container_name: kiora_orders_db
@@ -107,7 +127,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # pgAdmin — interfaz visual (se conecta a los 4 databases)
+  # pgAdmin — interfaz visual (se conecta a los 5 databases)
   kiora-pgadmin:
     image: dpage/pgadmin4
     container_name: kiora_pgadmin
@@ -126,6 +146,7 @@ services:
       - products-db
       - inventory-db
       - orders-db
+      - notifications-db
 
   # ─────────────────────────────────────────────
   # MICROSERVICIOS
@@ -267,9 +288,14 @@ services:
     env_file:
       - ./services/notifications-service/.env.docker
     environment:
+      DB_HOST: notifications-db
+      DB_PORT: 5432
+      DB_NAME: kiora_notifications
       REDIS_HOST: kiora-redis
       REDIS_PORT: 6379
     depends_on:
+      notifications-db:
+        condition: service_healthy
       kiora-redis:
         condition: service_healthy
 
@@ -349,6 +375,7 @@ volumes:
   products_db_data:
   inventory_db_data:
   orders_db_data:
+  notifications_db_data:
   redis_data:
   pgadmin_data:
   prometheus_data:

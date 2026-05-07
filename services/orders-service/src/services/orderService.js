@@ -2,40 +2,20 @@
 
 const orderRepository = require('../repositories/orderRepository');
 const invoiceRepository = require('../repositories/invoiceRepository');
+const db = require('../config/db');
 const logger = require('../config/logger');
-const env = require('../config/env');
-const { createCircuitBreaker } = require('../utils/circuitBreaker');
-const { outgoingHeaders, fetchWithRetry } = require('../utils/httpClient');
+const { outgoingHeaders, fetchWithRetry, NOTIFY_TIMEOUT_MS } = require('../utils/httpClient');
 
 /**
  * orderService
  * Capa de servicio que encapsula la lógica de negocio de órdenes.
- * Responsable de la Saga de completar venta y la comunicación con inventory-service.
+ *
+ * Fase 5: Las operaciones de inventario ahora se delegan al Outbox Poller.
+ * En lugar de hacer llamadas HTTP síncronas a inventory-service, se insertan
+ * eventos en la tabla outbox_events dentro de la misma transacción que actualiza
+ * el estado de la orden. Esto garantiza consistencia atómica local y
+ * consistencia eventual con inventory-service.
  */
-
-/* ── Circuit Breaker para inventory-service ──────────────────────────────── */
-
-async function _postInventoryMovement(url, body, headers) {
-    const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-        const errBody = await res.text();
-        const err = new Error(`Inventory responded with ${res.status}: ${errBody}`);
-        err.status = res.status;
-        err.body = errBody;
-        throw err;
-    }
-    return res;
-}
-
-const inventoryBreaker = createCircuitBreaker(
-    _postInventoryMovement,
-    'inventory-service',
-    { timeout: 2000, resetTimeout: 30000 }
-);
 
 /* ── Crear orden ─────────────────────────────────────────────────────────── */
 
@@ -50,14 +30,23 @@ async function createOrder(data) {
     return order;
 }
 
-/* ── Saga: completar venta ───────────────────────────────────────────────── */
+/* ── Completar venta (Outbox transaccional) ──────────────────────────────── */
 
 /**
- * Completa una venta ejecutando la Saga de descuento de inventario.
- * 1. Obtiene los ítems de la venta
- * 2. Descuenta stock por cada ítem vía inventory-service
- * 3. Si falla un ítem, compensa (revierte) los ítems ya procesados
- * 4. Si todo OK, actualiza el estado en BD
+ * Completa una venta usando el patrón Outbox transaccional.
+ *
+ * Flujo:
+ * 1. Validar estado de la orden (idempotencia, transición válida)
+ * 2. BEGIN transacción
+ *    a. UPDATE Ventas → 'completada'
+ *    b. INSERT Factura
+ *    c. INSERT outbox_events (inventory.movement) × N ítems
+ * 3. COMMIT
+ * 4. Broadcast al dashboard (fire & forget, fuera de la transacción)
+ *
+ * El Outbox Poller despachará los eventos a inventory-service en background.
+ * Si inventory rechaza un movimiento (409), el poller disparará la
+ * compensación automática (cancelación + reembolso Stripe si aplica).
  *
  * @param {number} orderId
  * @param {object} reqHeaders — Headers del request original (para correlation-id)
@@ -68,7 +57,7 @@ async function completeOrder(orderId, reqHeaders) {
 
     // ── Idempotencia: si ya fue completada, no reprocessar ──
     if (order.estado === 'completada') {
-        logger.warn('Saga: orden ya completada, ignorando (idempotente)', { orderId });
+        logger.warn('Outbox: orden ya completada, ignorando (idempotente)', { orderId });
         return { ok: true, data: order, idempotent: true };
     }
 
@@ -85,16 +74,31 @@ async function completeOrder(orderId, reqHeaders) {
         return { ok: true, data: result.rows[0] };
     }
 
-    const headers = outgoingHeaders(reqHeaders);
-    const exitosos = [];
-    let inventoryFailed = false;
-    let errorDetails = null;
+    // ── Transacción atómica: estado + factura + outbox events ──
+    const client = await db.connect();
+    let updatedOrder;
 
-    // Paso 1: Descontar stock por cada ítem
-    for (const item of order.items) {
-        try {
-            await inventoryBreaker.fire(
-                `${env.inventoryServiceUrl}/api/inventory/movements`,
+    try {
+        await client.query('BEGIN');
+
+        // 1. Marcar venta como completada
+        const result = await orderRepository.updateStatus(orderId, 'completada', client);
+        updatedOrder = result.rows[0];
+
+        // 2. Generar factura
+        const totalQty = order.items.reduce((sum, i) => sum + i.cantidad, 0);
+        await invoiceRepository.create({
+            fk_id_vent: orderId,
+            id_usu: 1,
+            cantidad_vent: totalQty,
+            precio_prod: order.items[0]?.precio_unit || 0,
+            montototal_vent: updatedOrder.montofinal_vent,
+        }, client);
+
+        // 3. Insertar eventos outbox para cada ítem (descuento de inventario)
+        for (const item of order.items) {
+            await orderRepository.insertOutboxEvent(
+                'inventory.movement',
                 {
                     tipo_mov: 'salida',
                     cantidad: item.cantidad,
@@ -102,91 +106,41 @@ async function completeOrder(orderId, reqHeaders) {
                     fk_id_vent: Number(orderId),
                     desc_mov: `Venta #${orderId}`,
                 },
-                headers
+                client
             );
-            exitosos.push(item);
-            logger.info('Stock restado', { cod_prod: item.cod_prod, orderId });
-        } catch (err) {
-            inventoryFailed = true;
-            errorDetails = err.body || err.message;
-            logger.warn('Fallo stock para un item', {
-                cod_prod: item.cod_prod,
-                status: err.status,
-                error: errorDetails,
-            });
-            break;
-        }
-    }
-
-    // Paso 2: SAGA COMPENSACIÓN si falló
-    if (inventoryFailed) {
-        logger.warn('⚠️ SAGA: Iniciando rollback de inventario', { itemsRevertir: exitosos.length });
-
-        for (const reg of exitosos) {
-            try {
-                await fetchWithRetry(
-                    `${env.inventoryServiceUrl}/api/inventory/movements`,
-                    {
-                        method: 'POST',
-                        headers,
-                        body: JSON.stringify({
-                            tipo_mov: 'entrada',
-                            cantidad: reg.cantidad,
-                            cod_prod: reg.cod_prod,
-                            fk_id_vent: Number(orderId),
-                            desc_mov: `COMPENSACION SAGA: FALLO DE ORDEN #${orderId}`,
-                        }),
-                    },
-                    { maxRetries: 3 }
-                );
-                logger.info('✅ SAGA: Producto devuelto', { cod_prod: reg.cod_prod });
-            } catch (e) {
-                logger.error('CRÍTICO: Falló la compensación SAGA', {
-                    cod_prod: reg.cod_prod,
-                    err: e.message,
-                });
-            }
         }
 
-        return {
-            error: 'Inventario insuficiente o servicio caído. Orden revertida automáticamente.',
-            code: 'SAGA_ROLLBACK',
-            details: errorDetails,
-            status: 500,
-        };
-    }
-
-    // Paso 3: Todo OK — actualizar estado en BD
-    const result = await orderRepository.updateStatus(orderId, 'completada');
-    const updatedOrder = result.rows[0];
-
-    // ── Paso Extra: Generar registro en tabla Factura ──
-    try {
-        const totalQty = order.items.reduce((sum, i) => sum + i.cantidad, 0);
-        await invoiceRepository.create({
-            fk_id_vent: orderId,
-            id_usu: 1, // Usuario general por defecto
-            cantidad_vent: totalQty,
-            precio_prod: order.items[0]?.precio_unit || 0,
-            montototal_vent: updatedOrder.montofinal_vent
+        await client.query('COMMIT');
+        logger.info('Transacción Outbox completada', {
+            id_vent: orderId,
+            estado: 'completada',
+            outboxEvents: order.items.length,
         });
-        logger.info('Registro de factura creado automáticamente', { orderId });
-    } catch (invErr) {
-        logger.error('Error al crear registro de factura automático', { orderId, error: invErr.message });
-        // No bloqueamos la venta por esto
+    } catch (err) {
+        await client.query('ROLLBACK');
+        logger.error('Error en transacción Outbox de completeOrder', {
+            orderId, error: err.message,
+        });
+        throw err;
+    } finally {
+        client.release();
     }
 
-    // ── Dashboard en tiempo real (Notificar vía WebSockets en API Gateway) ──
+    // ── Broadcast al dashboard (fire & forget, fuera de la transacción) ──
     try {
         const GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
-        await fetch(`${GATEWAY_URL}/api/internal/broadcast`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                event: 'new_sale',
-                payload: updatedOrder
-            })
-        });
+        await fetchWithRetry(
+            `${GATEWAY_URL}/api/internal/broadcast`,
+            {
+                method: 'POST',
+                headers: outgoingHeaders(reqHeaders),
+                body: JSON.stringify({
+                    event: 'new_sale',
+                    payload: updatedOrder,
+                }),
+            },
+            { maxRetries: 1, timeoutMs: NOTIFY_TIMEOUT_MS }
+        );
     } catch (wsErr) {
         logger.warn('No se pudo notificar nueva venta al Dashboard (WebSocket)', { error: wsErr.message });
     }
@@ -198,7 +152,8 @@ async function completeOrder(orderId, reqHeaders) {
 /* ── Actualizar estado genérico ──────────────────────────────────────────── */
 
 /**
- * Actualiza el estado de una venta. Si es 'completada', ejecuta la Saga.
+ * Actualiza el estado de una venta. Si es 'completada', ejecuta el flujo Outbox.
+ * Si es 'reembolsada', genera eventos outbox de entrada de inventario.
  */
 async function updateStatus(orderId, estado, reqHeaders) {
     if (estado === 'completada') {
@@ -224,7 +179,7 @@ async function updateStatus(orderId, estado, reqHeaders) {
         };
     }
 
-    // Si es reembolso, devolver stock a inventario
+    // ── Reembolso: transacción atómica con Outbox ──
     if (estado === 'reembolsada') {
         logger.info('Procesando reembolso de inventario', { orderId });
         const headers = outgoingHeaders(reqHeaders);
@@ -234,23 +189,36 @@ async function updateStatus(orderId, estado, reqHeaders) {
                 await fetchWithRetry(
                     `${env.inventoryServiceUrl}/api/inventory/movements`,
                     {
-                        method: 'POST',
-                        headers,
-                        body: JSON.stringify({
-                            tipo_mov: 'entrada',
-                            cantidad: item.cantidad,
-                            cod_prod: item.cod_prod,
-                            fk_id_vent: Number(orderId),
-                            desc_mov: `REEMBOLSO: Venta #${orderId}`
-                        })
-                    }
+                        tipo_mov: 'entrada',
+                        cantidad: item.cantidad,
+                        cod_prod: item.cod_prod,
+                        fk_id_vent: Number(orderId),
+                        desc_mov: `REEMBOLSO: Venta #${orderId}`,
+                    },
+                    client
                 );
-            } catch (err) {
-                logger.error('Error al devolver stock en reembolso', { orderId, cod_prod: item.cod_prod, error: err.message });
             }
+
+            await client.query('COMMIT');
+            logger.info('Transacción Outbox de reembolso completada', {
+                orderId, outboxEvents: order.items.length,
+            });
+        } catch (err) {
+            await client.query('ROLLBACK');
+            logger.error('Error en transacción Outbox de reembolso', {
+                orderId, error: err.message,
+            });
+            throw err;
+        } finally {
+            client.release();
         }
+
+        const updated = await orderRepository.findByIdWithItems(orderId);
+        logger.info('Estado de venta actualizado', { id_vent: orderId, estado: 'reembolsada' });
+        return { ok: true, data: updated };
     }
 
+    // ── Otros estados (cancelada, etc.) — sin outbox ──
     const result = await orderRepository.updateStatus(orderId, estado);
     logger.info('Estado de venta actualizado', { id_vent: orderId, estado });
     return { ok: true, data: result.rows[0] };

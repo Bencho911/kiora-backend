@@ -14,11 +14,32 @@ app.use(helmet());
 app.use(cors({ origin: env.corsOrigin, credentials: true }));
 app.use(express.json());
 
+// ── Correlation ID (AsyncLocalStorage) — DEBE IR ANTES de cualquier ruta ──
+const correlationMiddleware = require('./middlewares/correlationMiddleware');
+app.use(correlationMiddleware);
+
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'inventory-service' }));
 
 // ── Métricas (Prometheus) ─────────────────────────────────────────────────
 const promClient = require('prom-client');
 promClient.collectDefaultMetrics({ prefix: 'inventory_' });
+
+// Histograma de latencia por ruta para p95/p99
+const httpDuration = new promClient.Histogram({
+    name: 'inventory_http_request_duration_seconds',
+    help: 'Duración de requests HTTP en inventory-service',
+    labelNames: ['method', 'route', 'status_code'],
+    buckets: [0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5],
+});
+
+app.use((req, res, next) => {
+    const end = httpDuration.startTimer();
+    res.on('finish', () => {
+        end({ method: req.method, route: req.route?.path || req.path, status_code: res.statusCode });
+    });
+    next();
+});
+
 app.get('/metrics', async (_req, res) => {
     res.set('Content-Type', promClient.register.contentType);
     res.end(await promClient.register.metrics());

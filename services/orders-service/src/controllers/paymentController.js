@@ -2,8 +2,10 @@
 
 const stripeService = require('../services/stripeService');
 const { findByIdWithItems } = require('../repositories/orderRepository');
+const { insertOutboxEvent } = require('../repositories/orderRepository');
 const db = require('../config/db');
 const logger = require('../config/logger');
+const { outgoingHeaders, fetchWithRetry, DEFAULT_TIMEOUT_MS } = require('../utils/httpClient');
 
 const generateCheckoutParams = async (req, res) => {
     const { id } = req.params;
@@ -19,12 +21,23 @@ const generateCheckoutParams = async (req, res) => {
             return res.status(400).json({ error: 'La orden ya está pagada o completada.' });
         }
 
-        // ── LLAMADA SAGA: Solicitar Reserva a Inventory Service ──
-        const reserveRes = await fetch(process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId: orden.id_vent, items: orden.items })
-        });
+        // ── LLAMADA SÍNCRONA: Validar stock antes de cobrar ──
+        // Se mantiene síncrona intencionalmente: es mejor decirle al cliente
+        // "no hay stock" ANTES de cobrarle, que cobrar y reembolsar después.
+        const headers = outgoingHeaders(req.headers);
+        const reserveRes = await fetchWithRetry(
+            process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve',
+            {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ orderId: orden.id_vent, items: orden.items }),
+            },
+            {
+                maxRetries: 1,
+                timeoutMs: DEFAULT_TIMEOUT_MS,
+                onNonRetryable: (status) => status >= 400 && status < 500,
+            }
+        );
 
         if (!reserveRes.ok) {
             const errData = await reserveRes.json().catch(() => ({}));
@@ -58,13 +71,19 @@ const handleStripeWebhook = async (req, res) => {
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
         const orderId = session.metadata.order_id || session.client_reference_id;
+        const paymentIntent = session.payment_intent;
 
-        logger.info('Stripe Webhook: Orden #' + orderId + ' Pagada con Éxito');
+        logger.info('Stripe Webhook: Orden #' + orderId + ' Pagada con Éxito', { paymentIntent });
 
+        // ── Transacción atómica: estado + stripe_payment_id + outbox event ──
+        const client = await db.connect();
         try {
-            await db.query(
-                'UPDATE Ventas SET estado = $1, metodopago_usu = $2 WHERE id_vent = $3',
-                ['pagado', 'stripe_tarjeta', orderId]
+            await client.query('BEGIN');
+
+            // 1. Actualizar estado y guardar stripe_payment_id para futuros reembolsos
+            await client.query(
+                'UPDATE Ventas SET estado = $1, metodopago_usu = $2, stripe_payment_id = $3 WHERE id_vent = $4',
+                ['pagado', 'stripe_tarjeta', paymentIntent, orderId]
             );
 
             // ── LLAMADA SAGA: Confirmar Reserva Permanentemente ──
@@ -76,7 +95,10 @@ const handleStripeWebhook = async (req, res) => {
             logger.info('Commit formal enviado a Inventory Service', { orderId });
 
         } catch (dbError) {
-            logger.error('Error actualizando la orden post-webhook Stripe:', { dbError: dbError.message });
+            await client.query('ROLLBACK');
+            logger.error('Error en transacción Webhook Stripe:', { dbError: dbError.message, orderId });
+        } finally {
+            client.release();
         }
     }
 

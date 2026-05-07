@@ -2,6 +2,8 @@
 
 Sistema de **microservicios** en Node.js para el kiosco inteligente Kiora.
 
+**Contribuir:** [CONTRIBUTING.md](CONTRIBUTING.md) — Definition of Done, PRs y gobernanza de secretos ([docs/SECRETS_INVENTORY.md](docs/SECRETS_INVENTORY.md)).
+
 ---
 
 ## Arquitectura
@@ -29,9 +31,16 @@ Cada servicio es **autónomo**: tiene su propia base de datos, migraciones, Dock
 
 Entrada recomendada para el front: proxifica `/api/auth`, `/api/users`, `/api/products`, `/api/categories`, `/api/inventory`, `/api/orders`, `/api/invoices`, `/api/notifications` hacia cada microservicio. Expone `GET /health`, `GET /health/all` y Swagger unificado en `/api/docs`. Variables: `USERS_SERVICE_URL`, `PRODUCTS_SERVICE_URL`, `INVENTORY_SERVICE_URL`, `ORDERS_SERVICE_URL`, `NOTIFICATIONS_SERVICE_URL`, `PORT`, `CORS_ORIGIN`. Local: `cd services/api-gateway && npm install && npm run dev`.
 
-Genera o respeta **`x-correlation-id`** (también acepta **`x-request-id`** del cliente) y lo reenvía a los servicios detrás del proxy.
+3. Genera o respeta **`x-correlation-id`** (también acepta **`x-request-id`** del cliente) y lo reenvía a los servicios detrás del proxy.
 
-Contratos HTTP entre servicios: [docs/INTER_SERVICE_CONTRACTS.md](docs/INTER_SERVICE_CONTRACTS.md).
+### 📚 Documentación de Arquitectura y Resiliencia
+
+El backend está diseñado para soportar fallos parciales sin interrumpir el negocio. Consulta los siguientes documentos de diseño:
+
+- 📄 **[Contratos e Integración (Síncrona y Asíncrona)](docs/INTER_SERVICE_CONTRACTS.md)**: URLs, responsabilidades y comunicación HTTP/Outbox entre servicios.
+- 🛡️ **[Matriz de Degradación (Operaciones)](docs/DEGRADATION_MATRIX.md)**: Guía de qué ocurre cuando un microservicio cae y cómo el sistema se recupera (sagas/compensaciones automáticas).
+- 🚀 **[Estado de Producción y Roadmap](docs/PRODUCTION_READINESS.md)**: Nivel de madurez técnica de cada servicio (Production-Ready, Beta, Experimental).
+- 🔑 **[Inventario de Secretos](docs/SECRETS_INVENTORY.md)**: Gobernanza de variables de entorno y credenciales sensibles.
 
 ---
 
@@ -138,6 +147,6 @@ npm run migrate:up:docker # Aplica migraciones en contenedor Docker
 
 ## CI/CD
 
-**GitHub Actions** en cada push/PR a `main` o `develop`: users-service (lint, audit high, tests, migraciones), products-service (lint, audit critical, tests, migraciones), inventory-service y orders-service (lint, audit high, tests), api-gateway (lint, audit high, tests). Ver [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+**GitHub Actions** en cada push/PR a `main` o `develop`: validación de **`docker compose config`** (en CI con stubs vacíos de `.env.docker`, que no están en git), users-service (lint, audit high, tests, migraciones), products-service (lint, audit high, tests, migraciones), inventory-service, orders-service, notifications-service y reports-service (lint, audit high, tests), api-gateway (lint, audit high, tests). Ver [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Lista de checks para branch protection: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> **products-service:** `audit:ci` usa `--audit-level=critical` porque dependencias transitivas (p. ej. Cloudinary v1) reportan *high* hasta una actualización mayor planificada.
+> **reports-service:** `npm audit` puede listar hallazgos **moderate** en la cadena **exceljs → uuid**; `audit:ci` usa `--audit-level=high` como en el resto de servicios. Cuando **exceljs** (o un sustituto) permita **uuid** parcheado sin romper CommonJS/Jest, conviene revisar de nuevo.

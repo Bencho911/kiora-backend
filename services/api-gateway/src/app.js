@@ -150,6 +150,7 @@ const swaggerOptions = {
             { url: '/api/docs.json?svc=inventory', name: 'Inventory Service' },
             { url: '/api/docs.json?svc=orders', name: 'Orders Service' },
             { url: '/api/docs.json?svc=reports', name: 'Reports Service' },
+            { url: '/api/docs.json?svc=notifications', name: 'Notifications Service' },
         ],
     },
 };
@@ -159,7 +160,7 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(null, swaggerOptions));
 app.get('/api/docs.json', async (req, res) => {
     const svc = req.query.svc;
     const base = services[svc];
-    if (!base) return res.status(400).json({ error: 'svc param must be products, inventory or orders' });
+    if (!base) return res.status(400).json({ error: 'svc param must be products, inventory, orders, notifications or reports' });
     try {
         const r = await fetch(`${base}/api/docs.json`);
         const json = await r.json();
