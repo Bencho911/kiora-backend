@@ -9,6 +9,9 @@ process.env.SMTP_PORT = '587';
 process.env.SMTP_USER = 'test';
 process.env.SMTP_PASS = 'test';
 process.env.FROM_EMAIL = 'test@kiora.local';
+process.env.DB_HOST = '127.0.0.1';
+process.env.DB_PORT = '5432';
+process.env.DB_NAME = 'test_db';
 
 const request = require('supertest');
 const app = require('../app');

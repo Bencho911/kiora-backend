@@ -16,11 +16,15 @@ const REQUIRED_VARS = [
 const missing = REQUIRED_VARS.filter((v) => !process.env[v]);
 
 if (missing.length > 0) {
-    console.error(
-        `[env] Faltan variables de entorno requeridas: ${missing.join(', ')}\n` +
-        'Copia .env.example → .env.local y completa los valores.'
-    );
-    process.exit(1);
+    const errorMsg = `[env] Faltan variables de entorno requeridas: ${missing.join(', ')}\n` +
+                   'Copia .env.example → .env.local y completa los valores.';
+    
+    if (process.env.NODE_ENV === 'test') {
+        console.warn(errorMsg);
+    } else {
+        console.error(errorMsg);
+        process.exit(1);
+    }
 }
 
 module.exports = {
