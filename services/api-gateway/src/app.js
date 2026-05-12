@@ -17,11 +17,30 @@ const auditMiddleware = require('./middleware/auditMiddleware');
 
 const app = express();
 
+/** Orígenes permitidos (kiosco :9095, Vite :5173, panel, etc.). CORS_ORIGIN puede ser lista separada por comas. */
+function corsAllowedOrigins() {
+    const raw = process.env.CORS_ORIGIN;
+    if (raw && raw.includes(',')) {
+        return raw.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    if (raw && raw.trim()) return raw.trim();
+    return [
+        'http://localhost:3000',
+        'http://localhost:8080',
+        'http://localhost:9095',
+        'http://127.0.0.1:9095',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:4321',
+        'http://localhost:4173',
+    ];
+}
+
 // ── Configuración de Seguridad y Middlewares Globales ──────────────────────
 app.use(helmet());
 
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: corsAllowedOrigins(),
     credentials: true,
 }));
 
