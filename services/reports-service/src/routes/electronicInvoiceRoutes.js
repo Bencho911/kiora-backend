@@ -22,5 +22,6 @@ const controller = require('../controllers/electronicInvoiceController');
  *         description: Venta no encontrada.
  */
 router.get('/:id_vent', controller.generateElectronicInvoice);
+router.post('/:id_vent/cancel', controller.cancelElectronicInvoice);
 
 module.exports = router;

@@ -1,3 +1,9 @@
+---
+title: "Contratos Inter-servicio"
+tags: [arquitectura, contratos, backend]
+---
+[[Home]] > **Contratos Inter-servicio**
+
 # Contratos entre microservicios (Kiora)
 
 Referencias HTTP entre servicios. **No hay FK entre bases de datos**; la consistencia es por aplicación.

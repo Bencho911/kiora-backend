@@ -53,8 +53,9 @@ const authMiddleware = (req, res, next) => {
     // 2. Verificar si es petición de Kiosco (Machine-to-Machine API Key)
     const apiKeyHeader = req.headers['x-api-key'];
     if (KIOSK_API_KEY && apiKeyHeader === KIOSK_API_KEY) {
-        // Inyectamos un usuario de Kiosco para servicios bajo demanda downstream
-        req.headers['x-user-id'] = 'kiosk-0';
+        // Inyectamos el ID del usuario kiosco para trazabilidad downstream
+        const kioskUserId = process.env.KIOSKO_USER_ID || '1';
+        req.headers['x-user-id'] = kioskUserId;
         req.headers['x-user-role'] = 'kiosco';
         return next();
     }

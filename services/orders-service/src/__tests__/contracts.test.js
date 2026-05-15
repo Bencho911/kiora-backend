@@ -198,4 +198,92 @@ describe('contracts: orders → inventory (Outbox)', () => {
             }),
         }));
     });
+
+    test('updateStatus(reembolsada) inserta outbox events con tipo_mov=entrada (no HTTP directo)', async () => {
+        jest.resetModules();
+
+        process.env.NODE_ENV = 'test';
+        process.env.DB_USER = 'test';
+        process.env.DB_PASSWORD = 'test';
+        process.env.DB_HOST = 'localhost';
+        process.env.DB_PORT = '5432';
+        process.env.DB_NAME = 'test';
+        process.env.INVENTORY_SERVICE_URL = 'http://inventory:3003';
+
+        const mockClient = {
+            query: jest.fn().mockResolvedValue({ rows: [] }),
+            release: jest.fn(),
+        };
+
+        jest.mock('../config/db', () => ({
+            query: jest.fn(),
+            connect: jest.fn().mockResolvedValue(mockClient),
+        }));
+
+        jest.mock('../repositories/orderRepository');
+        jest.mock('../repositories/invoiceRepository');
+
+        const orderRepo = require('../repositories/orderRepository');
+        const invoiceRepo = require('../repositories/invoiceRepository');
+
+        // Simular una orden completada con items
+        orderRepo.findByIdWithItems.mockResolvedValue({
+            id_vent: 99,
+            estado: 'completada',
+            montofinal_vent: 250,
+            items: [
+                { cod_prod: 'PROD-001', cantidad: 3, precio_unit: 50 },
+                { cod_prod: 'PROD-002', cantidad: 1, precio_unit: 100 },
+            ],
+        });
+
+        orderRepo.updateStatus.mockResolvedValue({
+            rows: [{ id_vent: 99, estado: 'reembolsada' }],
+        });
+
+        orderRepo.insertOutboxEvent.mockResolvedValue({ rows: [{ id: 1 }] });
+
+        // Capturar llamadas HTTP
+        const fetchCalls = [];
+        global.fetch = jest.fn().mockImplementation((url, opts) => {
+            fetchCalls.push({ url, opts });
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: async () => ({}),
+                text: async () => '{}',
+            });
+        });
+
+        const orderService = require('../services/orderService');
+
+        const result = await orderService.updateStatus(99, 'reembolsada', { 'x-correlation-id': 'corr-456' });
+        expect(result.ok).toBe(true);
+        expect(result.data.estado).toBe('reembolsada');
+
+        // Verificar transacción
+        expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
+        expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
+
+        // Verificar que se insertaron eventos outbox (uno por ítem)
+        expect(orderRepo.insertOutboxEvent).toHaveBeenCalledTimes(2);
+
+        // Verificar schema del primer evento outbox (debe ser entrada)
+        const firstCall = orderRepo.insertOutboxEvent.mock.calls[0];
+        expect(firstCall[0]).toBe('inventory.movement');
+        expect(firstCall[1]).toEqual(expect.objectContaining({
+            tipo_mov: 'entrada',
+            cantidad: 3,
+            cod_prod: 'PROD-001',
+            fk_id_vent: 99,
+            desc_mov: expect.stringContaining('REEMBOLSO'),
+        }));
+        expect(firstCall[2]).toBe(mockClient); // Usa el cliente de transacción
+
+        // Verificar que NO se hicieron llamadas HTTP directas a inventory
+        const inventoryHttpCalls = fetchCalls.filter(
+            ([url]) => url && url.includes('/api/inventory/movements')
+        );
+        expect(inventoryHttpCalls).toHaveLength(0);
+    });
 });

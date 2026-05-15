@@ -1,4 +1,11 @@
+---
+title: "Kiora Backend Root"
+tags: [root, kiora, backend]
+---
+
 # Kiora Backend 🚀
+
+> 🌌 **Obsidian Vault:** Este repositorio está configurado como una Bóveda de Obsidian. Comienza la navegación por la documentación en [[Home]].
 
 Sistema de **microservicios** en Node.js para el kiosco inteligente Kiora.
 
@@ -48,12 +55,12 @@ El backend está diseñado para soportar fallos parciales sin interrumpir el neg
 
 Sigue estos pasos para configurar y ejecutar el proyecto:
 
-1. **Configuración inicial**: Crea los archivos de entorno para todos los servicios.
+1. **Configuración inicial**: Genera los archivos de entorno básicos.
    ```bash
    chmod +x setup.sh
    ./setup.sh
    ```
-   *Nota: Revisa los archivos `.env.docker` generados en cada carpeta de servicio para asegurarte de que los secretos (JWT, SMTP) estén configurados si es necesario.*
+   *Nota: Las variables vitales (como `DATABASE_URL`) ahora se inyectan automáticamente a través de `docker-compose.yml`, lo que asegura que las bases de datos y migraciones funcionen sin problemas, incluso si omites pasos en la configuración local.*
 
 2. **Iniciar infraestructura**:
    ```bash
@@ -150,3 +157,19 @@ npm run migrate:up:docker # Aplica migraciones en contenedor Docker
 **GitHub Actions** en cada push/PR a `main` o `develop`: validación de **`docker compose config`** (en CI con stubs vacíos de `.env.docker`, que no están en git), users-service (lint, audit high, tests, migraciones), products-service (lint, audit high, tests, migraciones), inventory-service, orders-service, notifications-service y reports-service (lint, audit high, tests), api-gateway (lint, audit high, tests). Ver [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Lista de checks para branch protection: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > **reports-service:** `npm audit` puede listar hallazgos **moderate** en la cadena **exceljs → uuid**; `audit:ci` usa `--audit-level=high` como en el resto de servicios. Cuando **exceljs** (o un sustituto) permita **uuid** parcheado sin romper CommonJS/Jest, conviene revisar de nuevo.
+
+---
+
+## ☁️ Despliegue en Producción (Azure VM)
+
+La arquitectura de Kiora Backend está preparada para desplegarse ágilmente en una Máquina Virtual de Azure utilizando scripts de aprovisionamiento automáticos.
+
+**Guía completa:** 📖 [docs/AZURE_VM_DEPLOYMENT.md](docs/AZURE_VM_DEPLOYMENT.md)
+
+### Resumen de Operación
+El sistema se empaca localmente y se sincroniza hacia una Máquina Virtual Ubuntu en la nube.
+1. Se provisiona la infraestructura usando `./scripts/azure_vm_provision.sh` (requiere `az login`).
+2. Se sincroniza el código y se ejecuta la orquestación remotamente mediante `./scripts/azure_vm_deploy.sh`.
+3. Las migraciones de base de datos (`node-pg-migrate`) se ejecutan **automáticamente** durante el ciclo de vida de arranque de cada microservicio en la VM, gracias a la inyección de `DATABASE_URL` centralizada en el `docker-compose.yml`.
+
+*Seguridad:* Actualmente, el API Gateway en despliegues IP puros tiene `Content-Security-Policy` temporalmente inhabilitada en `helmet` para permitir el acceso interactivo a Swagger UI sin bloqueos HTTPS del navegador. Ver guía de despliegue para los pasos de implementación SSL.

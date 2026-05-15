@@ -1,4 +1,4 @@
-# Kiora — Notifications Service
+	8olyj 6uthvfcsdaxzq# Kiora — Notifications Service
 
 Microservicio dedicado exclusivamente al envío de notificaciones proactivas (emails, alertas automáticas, etc.) del ecosistema Kiora.
 Es un servicio desprovisto de Base de Datos relacional propia. Consiste en un **Consumer Group de Redis Streams** y un servidor HTTP para health-checks. Construido con **Node.js**, **Express** y **Nodemailer**.

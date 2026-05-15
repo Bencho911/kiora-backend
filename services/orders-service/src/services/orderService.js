@@ -4,7 +4,6 @@ const orderRepository = require('../repositories/orderRepository');
 const invoiceRepository = require('../repositories/invoiceRepository');
 const db = require('../config/db');
 const logger = require('../config/logger');
-const env = require('../config/env');
 const { outgoingHeaders, fetchWithRetry, NOTIFY_TIMEOUT_MS } = require('../utils/httpClient');
 
 /**
@@ -88,9 +87,10 @@ async function completeOrder(orderId, reqHeaders) {
 
         // 2. Generar factura
         const totalQty = order.items.reduce((sum, i) => sum + i.cantidad, 0);
+        const userId = Number(process.env.KIOSKO_USER_ID || 1);
         await invoiceRepository.create({
             fk_id_vent: orderId,
-            id_usu: 1,
+            id_usu: userId,
             cantidad_vent: totalQty,
             precio_prod: order.items[0]?.precio_unit || 0,
             montototal_vent: updatedOrder.montofinal_vent,
@@ -180,35 +180,43 @@ async function updateStatus(orderId, estado, reqHeaders) {
         };
     }
 
-    // ── Reembolso: transacción atómica con Outbox ──
+    // ── Reembolso: Outbox Pattern (consistencia eventual) ──
+    // En lugar de HTTP síncrono a inventory-service (que se caía si el servicio no respondía),
+    // encolamos eventos outbox dentro de la misma transacción que actualiza el estado.
+    // El Outbox Poller se encarga de despachar los movimientos de entrada de stock.
     if (estado === 'reembolsada') {
-        logger.info('Procesando reembolso de inventario', { orderId });
-        const headers = outgoingHeaders(reqHeaders);
+        logger.info('Procesando reembolso de inventario vía Outbox', { orderId });
 
-        for (const item of order.items) {
-            try {
-                await fetchWithRetry(
-                    `${env.inventoryServiceUrl}/api/inventory/movements`,
+        const client = await db.connect();
+        try {
+            await client.query('BEGIN');
+
+            const updated = await orderRepository.updateStatus(orderId, 'reembolsada', client);
+
+            for (const item of order.items) {
+                await orderRepository.insertOutboxEvent(
+                    'inventory.movement',
                     {
-                        method: 'POST',
-                        headers,
-                        body: JSON.stringify({
-                            tipo_mov: 'entrada',
-                            cantidad: item.cantidad,
-                            cod_prod: item.cod_prod,
-                            fk_id_vent: Number(orderId),
-                            desc_mov: `REEMBOLSO: Venta #${orderId}`
-                        })
-                    }
+                        tipo_mov: 'entrada',
+                        cantidad: item.cantidad,
+                        cod_prod: item.cod_prod,
+                        fk_id_vent: Number(orderId),
+                        desc_mov: `REEMBOLSO: Venta #${orderId}`
+                    },
+                    client
                 );
-            } catch (err) {
-                logger.error('Error al devolver stock en reembolso', { orderId, cod_prod: item.cod_prod, error: err.message });
             }
-        }
 
-        const updated = await orderRepository.updateStatus(orderId, estado);
-        logger.info('Estado de venta actualizado', { id_vent: orderId, estado: 'reembolsada' });
-        return { ok: true, data: updated.rows[0] };
+            await client.query('COMMIT');
+            logger.info('Reembolso encolado vía Outbox', { orderId, items: order.items.length });
+            return { ok: true, data: updated.rows[0] };
+        } catch (err) {
+            await client.query('ROLLBACK');
+            logger.error('Error en transacción de reembolso Outbox', { orderId, error: err.message });
+            throw err;
+        } finally {
+            client.release();
+        }
     }
 
     // ── Otros estados (cancelada, etc.) — sin outbox ──

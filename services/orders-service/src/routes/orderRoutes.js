@@ -7,6 +7,7 @@ const { createOrderSchema, updateOrderStatusSchema } = require('../validators/or
 const {
     getOrders,
     getOrderById,
+    getStats,
     createOrder,
     updateOrderStatus,
     deleteOrder,
@@ -67,6 +68,7 @@ router.get('/', getOrders);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
+router.get('/stats', getStats);
 router.get('/:id', getOrderById);
 
 /**

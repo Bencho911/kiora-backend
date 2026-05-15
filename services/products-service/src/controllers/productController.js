@@ -64,7 +64,7 @@ const getProductById = async (req, res, next) => {
 // POST /api/products  (HU10)
 const createProduct = async (req, res, next) => {
     const { nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo } = req.body;
-    const url_imagen = req.file ? req.file.path : null;
+    const url_imagen = req.file ? (req.file.path || null) : null;
 
     let parsedCats = [];
     if (fk_cod_cats) {

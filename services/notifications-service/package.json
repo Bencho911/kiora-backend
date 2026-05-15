@@ -10,10 +10,10 @@
     "audit:ci": "npm audit --audit-level=high",
     "lint": "eslint src --max-warnings 0",
     "lint:fix": "eslint src --fix --max-warnings 0",
-    "migrate": "node-pg-migrate -j sql -d src/db/migrations",
+    "migrate": "node-pg-migrate --migrations-dir src/db/migrations --no-pg-native",
     "migrate:up": "npm run migrate up",
     "migrate:down": "npm run migrate down",
-    "migrate:up:docker": "DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@${DB_HOST:-notifications-db}:${DB_PORT:-5432}/${DB_NAME:-kiora_notifications} npm run migrate up"
+    "migrate:up:docker": "npm run migrate up"
   },
   "keywords": [],
   "author": "",

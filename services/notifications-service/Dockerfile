@@ -14,8 +14,10 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --from=base /app/node_modules ./node_modules
 COPY . .
 
+RUN chmod +x entrypoint.sh
+
 USER appuser
 
 EXPOSE 3005
 
-CMD ["node", "src/index.js"]
+ENTRYPOINT ["./entrypoint.sh"]

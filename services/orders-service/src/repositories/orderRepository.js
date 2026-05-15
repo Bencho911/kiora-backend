@@ -114,10 +114,28 @@ const updateStatus = (id_vent, estado, client = db) =>
 const remove = (id_vent) =>
     db.query('DELETE FROM Ventas WHERE id_vent = $1 RETURNING id_vent', [id_vent]);
 
+const getStats = (fecha) =>
+    db.query(
+        `SELECT
+            COUNT(*)::int AS total_ventas,
+            COALESCE(SUM(montofinal_vent), 0) AS monto_total,
+            CASE WHEN COUNT(*) > 0 THEN SUM(montofinal_vent) / COUNT(*) ELSE 0 END AS ticket_promedio,
+            (SELECT row_to_json(v) FROM (
+                SELECT id_vent, fecha_vent, montofinal_vent, estado, metodopago_usu
+                FROM Ventas
+                WHERE fecha_vent::date = $1::date
+                ORDER BY fecha_vent DESC LIMIT 1
+            ) v) AS ultima_venta
+         FROM Ventas
+         WHERE fecha_vent::date = $1::date`,
+        [fecha]
+    );
+
 module.exports = {
     findAll,
     countAll,
     findById,
+    getStats,
     findByIdWithItems,
     createWithItems,
     insertOutboxEvent,

@@ -1,3 +1,9 @@
+---
+title: "Matriz de Degradación"
+tags: [resiliencia, operaciones, arquitectura]
+---
+[[Home]] > **Matriz de Degradación**
+
 # Matriz de Resiliencia y Degradación (Kiora Backend)
 
 El backend de Kiora opera bajo una arquitectura de microservicios distribuidos. Para asegurar la continuidad del negocio (evitar que el kiosco deje de vender por el fallo de un componente no crítico), se han implementado patrones de resiliencia (Outbox, circuit breakers, fail-open).

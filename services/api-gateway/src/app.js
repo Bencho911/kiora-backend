@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
@@ -18,12 +17,38 @@ const auditMiddleware = require('./middleware/auditMiddleware');
 const app = express();
 
 // ── Configuración de Seguridad y Middlewares Globales ──────────────────────
-app.use(helmet());
-
-app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    credentials: true,
+app.use(helmet({
+    contentSecurityPolicy: false,
 }));
+
+const ALLOWED_ORIGINS = new Set(
+    (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',').map(s => s.trim())
+);
+
+function setCorsHeaders(req, res) {
+    const origin = req.headers.origin;
+    if (origin && ALLOWED_ORIGINS.has(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, x-client-type');
+        res.setHeader('Vary', 'Origin');
+    }
+}
+
+// Middleware CORS manual: se ejecuta antes y después del proxy
+// (los servicios downstream tienen su propio CORS con localhost:3000
+// y el proxy pasa esos headers, necesitamos sobrescribirlos)
+app.use((req, res, next) => {
+    setCorsHeaders(req, res);
+    const origWriteHead = res.writeHead;
+    res.writeHead = function (...args) {
+        setCorsHeaders(req, res);
+        return origWriteHead.apply(this, args);
+    };
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+});
 
 app.use(morgan('dev'));
 app.use(cookieParser());
@@ -31,29 +56,33 @@ app.use(cookieParser());
 app.use(correlationId);
 
 // ── Rate Limiting Distribuido (Redis con fail-open) ───────────────────────
-const redisClient = new Redis({
-    host: process.env.REDIS_HOST || 'localhost',
-    port: Number(process.env.REDIS_PORT) || 6379,
-    password: process.env.REDIS_PASSWORD || undefined,
-    lazyConnect: true,
-    maxRetriesPerRequest: 1,
-    connectTimeout: 2000,
-    retryStrategy(times) {
-        if (times > 3) return null;
-        return Math.min(times * 200, 1000);
-    },
-});
-
 let redisReady = false;
-redisClient.on('connect', () => { redisReady = true; logger.info('Rate limiter: Redis conectado'); });
-redisClient.on('close', () => { redisReady = false; });
-redisClient.on('error', (err) => { redisReady = false; logger.warn('Rate limiter: Redis error', { error: err.message }); });
+let redisClient;
 
-redisClient.connect().catch(() => {
-    logger.warn('Rate limiter: Redis no disponible — fail-open activado');
-});
+if (process.env.NODE_ENV !== 'test') {
+    redisClient = new Redis({
+        host: process.env.REDIS_HOST || 'localhost',
+        port: Number(process.env.REDIS_PORT) || 6379,
+        password: process.env.REDIS_PASSWORD || undefined,
+        lazyConnect: true,
+        maxRetriesPerRequest: null,  // null = no lanzar MaxRetriesPerRequestError (evita crash)
+        connectTimeout: 3000,
+        retryStrategy(times) {
+            if (times > 5) return null; // dejar de reintentar tras 5 intentos
+            return Math.min(times * 500, 3000);
+        },
+    });
 
-const redisLimiter = rateLimit({
+    redisClient.on('connect', () => { redisReady = true; logger.info('Rate limiter: Redis conectado'); });
+    redisClient.on('close', () => { redisReady = false; });
+    redisClient.on('error', (err) => { redisReady = false; logger.warn('Rate limiter: Redis error', { error: err.message }); });
+
+    redisClient.connect().catch(() => {
+        logger.warn('Rate limiter: Redis no disponible — fail-open activado');
+    });
+}
+
+const redisLimiter = redisClient ? rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 2000,
     standardHeaders: true,
@@ -62,11 +91,11 @@ const redisLimiter = rateLimit({
         sendCommand: (...args) => redisClient.call(...args),
     }),
     message: { error: 'Too Many Requests', code: 'RATE_LIMIT', message: 'Límite de peticiones excedido (2000/15min), intenta más tarde.' },
-});
+}) : null;
 
 // Fail-open: si Redis no está listo, skip rate limiting
 app.use('/api', (req, res, next) => {
-    if (!redisReady) return next(); // fail-open: allow request
+    if (!redisReady || !redisLimiter) return next(); // fail-open: allow request
     return redisLimiter(req, res, next);
 });
 
@@ -124,13 +153,13 @@ const transparentProxy = (serviceName, target) =>
 app.use('/api/public/products', createProxyMiddleware({
     target: services.products,
     changeOrigin: true,
-    pathRewrite: { '^/api/public/products': '/api/products' },
+    pathRewrite: (path, req) => req.originalUrl.replace('/api/public/products', '/api/products'),
     on: { error: onProxyError('products-service (public)') },
 }));
 app.use('/api/public/categories', createProxyMiddleware({
     target: services.products,
     changeOrigin: true,
-    pathRewrite: { '^/api/public/categories': '/api/categories' },
+    pathRewrite: (path, req) => req.originalUrl.replace('/api/public/categories', '/api/categories'),
     on: { error: onProxyError('products-service (public)') },
 }));
 
@@ -174,12 +203,17 @@ app.get('/api/docs.json', async (req, res) => {
 /**
  * Crea un proxy que reescribe /api/v1/X → /api/X al microservicio.
  * El microservicio NO necesita saber de versiones.
+ *
+ * Nota: pathRewrite usa función con req.originalUrl porque http-proxy-middleware
+ * v3 recibe el path sin el prefijo de montaje de Express (req.url).
+ * Usar un objeto regex no funca porque el regex se aplica contra el path recortado.
  */
 const v1Proxy = (serviceName, target, basePath) =>
     createProxyMiddleware({
         target,
         changeOrigin: true,
-        pathRewrite: { [`^/api/v1${basePath}`]: `/api${basePath}` },
+        pathRewrite: (path, req) =>
+            req.originalUrl.replace(`/api/v1${basePath}`, `/api${basePath}`),
         on: {
             proxyReq: (proxyReq, req) => {
                 const cid = req.headers['x-correlation-id'];
@@ -218,28 +252,16 @@ app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'API Gateway is running' });
 });
 
-// ── Dashboard stats (ventas en tiempo real) ───────────────────────────────
+// ── Dashboard stats (ventas en tiempo real) — delegate a orders-service ───
 app.get('/api/dashboard/stats', async (req, res) => {
     try {
-        const ordersRes = await fetch(`${services.orders}/api/orders?limit=100`);
-        const ordersData = await ordersRes.json();
-        const ventas = ordersData.data || [];
-
-        const hoy = new Date().toISOString().slice(0, 10);
-        const ventasHoy = ventas.filter(v => v.fecha_vent && v.fecha_vent.slice(0, 10) === hoy);
-        const completadas = ventasHoy.filter(v => v.estado === 'completada');
-
-        const totalVentas = completadas.length;
-        const montoTotal = completadas.reduce((sum, v) => sum + Number(v.montofinal_vent || 0), 0);
-        const ticketPromedio = totalVentas > 0 ? montoTotal / totalVentas : 0;
-
-        res.json({
-            fecha: hoy,
-            ventas_hoy: totalVentas,
-            monto_total: montoTotal.toFixed(2),
-            ticket_promedio: ticketPromedio.toFixed(2),
-            ultima_venta: completadas[0] || null,
-        });
+        const statsRes = await fetch(`${services.orders}/api/orders/stats`);
+        if (!statsRes.ok) {
+            logger.warn('Stats endpoint fallo, fallback a orders list', { status: statsRes.status });
+            return res.status(503).json({ error: 'No se pudieron obtener estadísticas' });
+        }
+        const data = await statsRes.json();
+        res.json(data);
     } catch (err) {
         logger.error('Error obteniendo stats del dashboard', { error: err.message });
         res.status(503).json({ error: 'No se pudieron obtener estadísticas' });
@@ -260,7 +282,9 @@ app.post('/api/internal/broadcast', (req, res) => {
 
 // ── Métricas (Prometheus) ─────────────────────────────────────────────────
 const promClient = require('prom-client');
-promClient.collectDefaultMetrics({ prefix: 'gateway_' });
+if (process.env.NODE_ENV !== 'test') {
+    promClient.collectDefaultMetrics({ prefix: 'gateway_' });
+}
 app.get('/metrics', async (_req, res) => {
     res.set('Content-Type', promClient.register.contentType);
     res.end(await promClient.register.metrics());

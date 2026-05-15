@@ -34,7 +34,7 @@ app.use(cookieParser());
 app.use(express.json());
 
 // ── Correlation ID (AsyncLocalStorage) — DEBE IR ANTES de cualquier ruta ──
-const correlationMiddleware = require('./middlewares/correlationMiddleware');
+const correlationMiddleware = require('./middleware/correlationMiddleware');
 app.use(correlationMiddleware);
 
 // ── Health check (liveness: proceso vivo) ─────────────────────────────────

@@ -113,7 +113,7 @@ const incrementLoginAttempts = (id_usu, intentos) =>
 
 const blockUser = (id_usu, intentos) =>
     db.query(
-        `UPDATE Cliente SET intentos_fallidos = $1, bloqueado_hasta = '9999-12-31 23:59:59' WHERE id_usu = $2`,
+        `UPDATE Cliente SET intentos_fallidos = $1, bloqueado_hasta = '9999-12-31 23:59:59' WHERE id_usu = $2 RETURNING id_usu, nom_usu, correo_usu`,
         [intentos, id_usu]
     );
 

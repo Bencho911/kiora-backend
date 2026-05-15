@@ -75,6 +75,8 @@ const handleStripeWebhook = async (req, res) => {
         logger.info('Stripe Webhook: Orden #' + orderId + ' Pagada con Éxito', { paymentIntent });
 
         // ── Transacción atómica: estado + stripe_payment_id + outbox event ──
+        // La llamada a inventory-service se delega al Outbox Poller para evitar
+        // inconsistencias (HTTP síncrono dentro de una transacción BD).
         const client = await db.connect();
         try {
             await client.query('BEGIN');
@@ -85,17 +87,19 @@ const handleStripeWebhook = async (req, res) => {
                 ['pagado', 'stripe_tarjeta', paymentIntent, orderId]
             );
 
-            // ── LLAMADA SAGA: Confirmar Reserva Permanentemente ──
-            await fetch(process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve/commit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ orderId })
-            });
-            logger.info('Commit formal enviado a Inventory Service', { orderId });
+            // 2. Insertar evento outbox: el poller confirmará la reserva contra inventory-service
+            await client.query(
+                `INSERT INTO outbox_events (event_type, payload) VALUES ($1, $2)`,
+                ['inventory.reserve.commit', JSON.stringify({ orderId })]
+            );
+            logger.info('Evento outbox inventory.reserve.commit encolado', { orderId });
 
+            await client.query('COMMIT');
+            logger.info('Transacción webhook completada', { orderId });
         } catch (dbError) {
             await client.query('ROLLBACK');
             logger.error('Error en transacción Webhook Stripe:', { dbError: dbError.message, orderId });
+            return res.status(500).json({ error: 'Error interno al procesar el pago.' });
         } finally {
             client.release();
         }

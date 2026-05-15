@@ -1,3 +1,9 @@
+---
+title: "Roadmap y Estado de Producción"
+tags: [roadmap, produccion, arquitectura]
+---
+[[Home]] > **Roadmap de Producción**
+
 # Roadmap y Estado de Producción (Kiora)
 
 Este documento es una guía interna para alinear las expectativas entre Ingeniería, Producto y Ventas sobre qué componentes del backend están listos para entornos productivos reales y cuáles requieren más iteraciones.
@@ -53,5 +59,19 @@ Tras completar las **Fases 0 a 7** de la auditoría arquitectónica, se ha cumpl
 - [x] **CI Verde en todo el monorepo:** Migraciones y tests se ejecutan siempre antes de cualquier merge a `main`.
 - [x] **Observabilidad:** Logs correlacionados en formato JSON y métricas de latencia de Prometheus (`p95`).
 - [x] **Documentación y Contratos:** Todos los servicios tienen especificaciones OpenAPI verificadas mediante Tests de Contratos.
-- [x] **Seguridad de Secretos:** `.env` extraídos fuera del repositorio fuente.
+- [x] **Seguridad de Secretos:** `.env` extraídos fuera del repositorio fuente e inyección robusta por `docker-compose`.
 - [x] **Consistencia Eventual Lidiada:** Sustitución de HTTP Síncrono por patrón Outbox asíncrono para operaciones multi-base de datos.
+
+---
+
+## 🏗️ Estado de la Infraestructura y Cloud
+
+El despliegue ha transicionado a un modelo de control completo mediante **Máquina Virtual (IaaS)** en Microsoft Azure, superando las restricciones de capa gratuita de servicios PaaS o Serverless.
+
+- **Orquestación:** Un solo nodo con Docker Compose (`Standard_D2s_v3`, 8GB RAM). 
+- **Bases de datos:** Contenedores aislados de PostgreSQL y Redis integrados en la red privada de Docker, reduciendo drásticamente latencias y costos de nube administrada.
+- **Migraciones:** Completamente automáticas vía `entrypoint.sh` en el arranque.
+
+### 🔮 Roadmap de Operaciones (Ops)
+1. **Adquisición de Dominio y Caddy:** Para alcanzar nivel *Enterprise-Grade*, se deberá adquirir un nombre de dominio (DNS) e instalar **Caddy** como *Reverse Proxy* en la VM para delegar la obtención y rotación automática de certificados SSL/HTTPS.
+2. **Rehabilitación de CSP:** Una vez desplegado Caddy con HTTPS nativo, se reactivará `Content-Security-Policy` completo en Helmet dentro del `api-gateway`.

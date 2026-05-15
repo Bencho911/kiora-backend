@@ -70,7 +70,7 @@ const login = async (req, res, next) => {
         if (!passwordValida) {
             const nuevoIntentos = (usuario.intentos_fallidos || 0) + 1;
 
-            if (nuevoIntentos >= MAX_INTENTOS) {
+            if (nuevoIntentos > MAX_INTENTOS) {
                 await userRepository.blockUser(usuario.id_usu, nuevoIntentos);
                 logger.warn('Cuenta bloqueada por intentos fallidos', { correo_usu });
                 return res.status(423).json({
@@ -100,6 +100,7 @@ const login = async (req, res, next) => {
             nom_usu: usuario.nom_usu,
             correo_usu: usuario.correo_usu,
             rol_usu: usuario.rol_usu,
+            tel_usu: usuario.tel_usu,
         };
 
         if (isWebClient) {
@@ -462,14 +463,30 @@ const adminResetPassword = async (req, res, next) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const outcome = await userRepository.updatePassword(id, hashedPassword);
 
-        if (!outcome.ok) {
+        if (outcome.rows.length === 0) {
             return res.status(400).json({ error: 'Error al actualizar la contraseña. Intenta de nuevo.' });
         }
 
-        logger.info('Admin cambió contraseña de usuario', { id_usu: outcome.id_usu, cambiado_por: req.usuario.id_usu });
+        logger.info('Admin cambió contraseña de usuario', { id_usu: id, cambiado_por: req.usuario.id_usu });
         res.status(200).json({ message: 'Contraseña actualizada exitosamente.' });
     } catch (error) {
         logger.error('Error en admin-reset-password', { error: error.message });
+        next(error);
+    }
+};
+
+// PATCH /api/auth/users/:id/block
+const blockUser = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const result = await userRepository.blockUser(id, 5);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Usuario no encontrado.' });
+        }
+        logger.info('Usuario bloqueado', { id_usu: id, bloqueado_por: req.usuario?.id_usu });
+        res.status(200).json({ message: 'Usuario bloqueado exitosamente.' });
+    } catch (error) {
+        logger.error('Error al bloquear usuario', { error: error.message });
         next(error);
     }
 };
@@ -480,6 +497,7 @@ module.exports = {
     refresh,
     logout,
     unlockUser,
+    blockUser,
     getUsers,
     getMe,
     updateUser,

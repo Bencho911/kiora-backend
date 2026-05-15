@@ -1,59 +1,78 @@
 'use strict';
 
-const crypto = require('crypto');
+const factusService = require('../services/factusService');
+const env = require('../config/env');
+const logger = require('../config/logger');
 
 /**
  * electronicInvoiceController
- * Genera una simulación de factura electrónica para efectos de tirilla fiscal.
+ * Emite una factura electronica real via Factus API o simulada si no esta configurado.
  */
 
 const generateElectronicInvoice = async (req, res, next) => {
     try {
         const { id_vent } = req.params;
 
-        // Simulamos obtener la venta desde orders-service (simplificado)
-        const mockMonto = 15000;
-        const mockFecha = new Date().toISOString();
+        // 1. Obtener la orden real desde orders-service
+        const orderRes = await fetch(`${env.ordersServiceUrl}/api/orders/${id_vent}`);
 
-        // Simular generación de CUFE (Código Único de Facturación Electrónica)
-        const cufe = crypto.createHash('sha384').update(`KIORA-VENTA-${id_vent}-${mockFecha}-${Date.now()}`).digest('hex');
-        
-        const qrCodeData = `NumFac: ${id_vent}\nFecFac: ${mockFecha}\nNitFac: 900.123.456-7\nDocAdq: CONSUMIDOR FINAL\nValFac: ${mockMonto}\nValIva: ${(mockMonto * 0.19).toFixed(2)}\nCUFE: ${cufe}`;
-
-        const invoiceData = {
-            metadata: {
-                proveedor_tecnologico: "Simulador Fiscal Kiora S.A.S.",
-                ambiente: "PRUEBAS",
-                fecha_validacion: new Date().toISOString()
-            },
-            factura: {
-                numero: `FES-${id_vent.toString().padStart(6, '0')}`,
-                cufe: cufe,
-                qr_data: qrCodeData,
-                emisor: {
-                    razon_social: "Kiora MicroMarket S.A.S.",
-                    nit: "900.123.456-7",
-                    regimen: "Responsable de IVA"
-                },
-                adquirente: {
-                    tipo: "Consumidor Final",
-                    identificacion: "222222222222"
-                },
-                totales: {
-                    subtotal: (mockMonto / 1.19).toFixed(2),
-                    iva_19: (mockMonto - (mockMonto / 1.19)).toFixed(2),
-                    total: Number(mockMonto).toFixed(2)
-                },
-                items: []
+        if (!orderRes.ok) {
+            if (orderRes.status === 404) {
+                return res.status(404).json({ error: 'Venta no encontrada.' });
             }
-        };
+            return res.status(orderRes.status).json({ error: 'Error al obtener datos de la venta.' });
+        }
 
-        res.status(200).json(invoiceData);
+        const order = await orderRes.json();
+
+        if (!order || !order.id_vent) {
+            return res.status(404).json({ error: 'Venta no encontrada.' });
+        }
+
+        // 2. Emitir factura via Factus (o simulada si no configurado)
+        const invoiceResult = await factusService.createInvoice(order);
+
+        logger.info('Factura electronica generada', {
+            id_vent,
+            factus: invoiceResult.status || 'ok',
+        });
+
+        res.status(200).json(invoiceResult);
     } catch (error) {
+        logger.error('Error generando factura electronica', { error: error.message });
+        next(error);
+    }
+};
+
+/**
+ * Anula una factura electronica en Factus.
+ * La orden se cancela en Kiora independientemente del resultado de Factus.
+ */
+const cancelElectronicInvoice = async (req, res, next) => {
+    try {
+        const { id_vent } = req.params;
+        const { reference_code } = req.body;
+
+        if (!reference_code) {
+            return res.status(400).json({ error: 'reference_code es requerido.' });
+        }
+
+        const result = await factusService.deleteInvoice(reference_code);
+
+        logger.info('Anulacion de factura electronica', {
+            id_vent,
+            reference_code,
+            factus_status: result.status,
+        });
+
+        res.status(200).json(result);
+    } catch (error) {
+        logger.error('Error anulando factura electronica', { error: error.message });
         next(error);
     }
 };
 
 module.exports = {
-    generateElectronicInvoice
+    generateElectronicInvoice,
+    cancelElectronicInvoice,
 };

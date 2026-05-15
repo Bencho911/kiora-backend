@@ -14,7 +14,7 @@ const findAll = ({ limit = 100, offset = 0 } = {}) =>
 const countAll = () => db.query('SELECT COUNT(*) FROM Categoria WHERE activo = true');
 
 const findById = (cod_cat) =>
-    db.query('SELECT * FROM Categoria WHERE cod_cat = $1', [cod_cat]);
+    db.query('SELECT * FROM Categoria WHERE cod_cat = $1 AND activo = true', [cod_cat]);
 
 /**
  * @param {{ nom_cat, descrip_cat }} fields
@@ -36,7 +36,7 @@ const update = (cod_cat, fields) => {
     const setClauses = entries.map(([key], i) => `${key} = $${i + 1}`).join(', ');
     return db.query(
         `UPDATE Categoria SET ${setClauses}
-         WHERE cod_cat = $${entries.length + 1}
+         WHERE cod_cat = $${entries.length + 1} AND activo = true
          RETURNING *`,
         [...entries.map(([, val]) => val), cod_cat]
     );
