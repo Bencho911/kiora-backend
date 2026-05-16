@@ -70,7 +70,7 @@ const login = async (req, res, next) => {
         if (!passwordValida) {
             const nuevoIntentos = (usuario.intentos_fallidos || 0) + 1;
 
-            if (nuevoIntentos > MAX_INTENTOS) {
+            if (nuevoIntentos >= MAX_INTENTOS) {
                 await userRepository.blockUser(usuario.id_usu, nuevoIntentos);
                 logger.warn('Cuenta bloqueada por intentos fallidos', { correo_usu });
                 return res.status(423).json({
