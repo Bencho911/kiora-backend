@@ -150,8 +150,6 @@ function buildInvoicePayload(order) {
     const total = subtotal + totalTax;
 
     const paymentMethodCode = order.metodopago_usu === 'tarjeta' ? '2' : '10';
-    const paymentMethodName = order.metodopago_usu === 'tarjeta' ? 'Tarjeta de crédito' : 'Efectivo';
-
     return {
         reference_code: `KIORA-VENTA-${order.id_vent}-${Date.now()}`,
         numbering_range_id: 389,

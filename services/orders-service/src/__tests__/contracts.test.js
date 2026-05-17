@@ -224,7 +224,7 @@ describe('contracts: orders → inventory (Outbox)', () => {
         jest.mock('../repositories/invoiceRepository');
 
         const orderRepo = require('../repositories/orderRepository');
-        const invoiceRepo = require('../repositories/invoiceRepository');
+        const _invoiceRepo = require('../repositories/invoiceRepository');
 
         // Simular una orden completada con items
         orderRepo.findByIdWithItems.mockResolvedValue({
