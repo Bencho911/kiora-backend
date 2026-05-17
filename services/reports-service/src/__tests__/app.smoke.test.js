@@ -1,6 +1,7 @@
 'use strict';
 
 process.env.NODE_ENV = 'test';
+process.env.ORDERS_SERVICE_URL = 'http://localhost:3004';
 
 const request = require('supertest');
 const app = require('../app');
