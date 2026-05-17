@@ -104,8 +104,8 @@ describe('contracts: orders → inventory (Outbox)', () => {
         expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
         expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
 
-        // Verificar que se insertaron eventos outbox (uno por ítem)
-        expect(orderRepo.insertOutboxEvent).toHaveBeenCalledTimes(2);
+        // Verificar que se insertaron eventos outbox (2 inventory + 1 factus.invoice)
+        expect(orderRepo.insertOutboxEvent).toHaveBeenCalledTimes(3);
 
         // Verificar schema del primer evento outbox
         const firstCall = orderRepo.insertOutboxEvent.mock.calls[0];
@@ -222,9 +222,12 @@ describe('contracts: orders → inventory (Outbox)', () => {
 
         jest.mock('../repositories/orderRepository');
         jest.mock('../repositories/invoiceRepository');
+        jest.mock('../services/stripeService', () => ({
+            createRefund: jest.fn().mockResolvedValue({ id: 'ref_test' }),
+        }));
 
         const orderRepo = require('../repositories/orderRepository');
-        const _invoiceRepo = require('../repositories/invoiceRepository');
+        const invoiceRepo = require('../repositories/invoiceRepository');
 
         // Simular una orden completada con items
         orderRepo.findByIdWithItems.mockResolvedValue({
@@ -242,6 +245,11 @@ describe('contracts: orders → inventory (Outbox)', () => {
         });
 
         orderRepo.insertOutboxEvent.mockResolvedValue({ rows: [{ id: 1 }] });
+
+        // Mock para buscar factura Factus asociada
+        invoiceRepo.findByVentaWithFactus.mockResolvedValue({
+            rows: [{ id: 10, fk_id_vent: 99, factus_invoice_number: 'SETP990002744' }],
+        });
 
         // Capturar llamadas HTTP
         const fetchCalls = [];
@@ -265,8 +273,8 @@ describe('contracts: orders → inventory (Outbox)', () => {
         expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
         expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
 
-        // Verificar que se insertaron eventos outbox (uno por ítem)
-        expect(orderRepo.insertOutboxEvent).toHaveBeenCalledTimes(2);
+        // Verificar que se insertaron eventos outbox (2 inventory + 1 factus.credit_note)
+        expect(orderRepo.insertOutboxEvent).toHaveBeenCalledTimes(3);
 
         // Verificar schema del primer evento outbox (debe ser entrada)
         const firstCall = orderRepo.insertOutboxEvent.mock.calls[0];

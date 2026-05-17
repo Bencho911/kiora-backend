@@ -43,4 +43,45 @@ const create = ({ fk_id_vent, id_usu, cantidad_vent, precio_prod, montototal_ven
         [fk_id_vent, id_usu, cantidad_vent, precio_prod, montototal_vent]
     );
 
-module.exports = { findAll, countAll, findById, findByVenta, create };
+/**
+ * Actualiza los campos de facturación electrónica (Factus/DIAN).
+ * @param {number} invoiceId — ID de la factura local
+ * @param {{ factus_invoice_number, factus_cufe, factus_public_url, factus_qr_link, factus_status }} fields
+ */
+const updateFactusFields = (invoiceId, fields, client = db) =>
+    client.query(
+        `UPDATE Factura
+         SET factus_invoice_number = COALESCE($2, factus_invoice_number),
+             factus_cufe           = COALESCE($3, factus_cufe),
+             factus_public_url     = COALESCE($4, factus_public_url),
+             factus_qr_link        = COALESCE($5, factus_qr_link),
+             factus_status         = COALESCE($6, factus_status)
+         WHERE id = $1
+         RETURNING *`,
+        [
+            invoiceId,
+            fields.factus_invoice_number || null,
+            fields.factus_cufe || null,
+            fields.factus_public_url || null,
+            fields.factus_qr_link || null,
+            fields.factus_status || null,
+        ]
+    );
+
+/**
+ * Busca la factura de una venta incluyendo los campos de Factus.
+ * @param {number} fk_id_vent — ID de la venta
+ */
+const findByVentaWithFactus = (fk_id_vent) =>
+    db.query(
+        `SELECT id, fk_id_vent, factus_invoice_number, factus_cufe,
+                factus_public_url, factus_qr_link, factus_status
+         FROM Factura
+         WHERE fk_id_vent = $1`,
+        [fk_id_vent]
+    );
+
+module.exports = {
+    findAll, countAll, findById, findByVenta, create,
+    updateFactusFields, findByVentaWithFactus,
+};

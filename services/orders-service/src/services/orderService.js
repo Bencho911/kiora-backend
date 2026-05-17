@@ -4,6 +4,7 @@ const orderRepository = require('../repositories/orderRepository');
 const invoiceRepository = require('../repositories/invoiceRepository');
 const db = require('../config/db');
 const logger = require('../config/logger');
+const stripeService = require('./stripeService');
 const { outgoingHeaders, fetchWithRetry, NOTIFY_TIMEOUT_MS } = require('../utils/httpClient');
 
 /**
@@ -111,6 +112,17 @@ async function completeOrder(orderId, reqHeaders) {
             );
         }
 
+        // 4. Insertar evento outbox para facturación electrónica (Factus/DIAN)
+        await orderRepository.insertOutboxEvent(
+            'factus.invoice',
+            {
+                orderId: Number(orderId),
+                montofinal_vent: updatedOrder.montofinal_vent,
+                metodopago_usu: updatedOrder.metodopago_usu,
+            },
+            client
+        );
+
         await client.query('COMMIT');
         logger.info('Transacción Outbox completada', {
             id_vent: orderId,
@@ -180,19 +192,31 @@ async function updateStatus(orderId, estado, reqHeaders) {
         };
     }
 
-    // ── Reembolso: Outbox Pattern (consistencia eventual) ──
-    // En lugar de HTTP síncrono a inventory-service (que se caía si el servicio no respondía),
-    // encolamos eventos outbox dentro de la misma transacción que actualiza el estado.
-    // El Outbox Poller se encarga de despachar los movimientos de entrada de stock.
+    // ── Reembolso: Stripe + Inventario (Outbox) + Nota Crédito Factus ──
     if (estado === 'reembolsada') {
-        logger.info('Procesando reembolso de inventario vía Outbox', { orderId });
+        logger.info('Procesando reembolso completo', { orderId });
 
+        // 1. Reembolso en Stripe (si la venta se pagó con tarjeta)
+        if (order.stripe_payment_id) {
+            try {
+                await stripeService.createRefund(order.stripe_payment_id);
+                logger.info('Stripe: reembolso emitido', { orderId, paymentId: order.stripe_payment_id });
+            } catch (stripeErr) {
+                logger.error('CRÍTICO: Falló reembolso Stripe', {
+                    orderId, stripe_payment_id: order.stripe_payment_id, error: stripeErr.message,
+                });
+                // Continuamos con el reembolso interno; el reembolso Stripe se hará manualmente
+            }
+        }
+
+        // 2. Transacción atómica: estado + inventario + nota crédito Factus
         const client = await db.connect();
         try {
             await client.query('BEGIN');
 
             const updated = await orderRepository.updateStatus(orderId, 'reembolsada', client);
 
+            // 2a. Eventos outbox para devolver inventario
             for (const item of order.items) {
                 await orderRepository.insertOutboxEvent(
                     'inventory.movement',
@@ -207,8 +231,27 @@ async function updateStatus(orderId, estado, reqHeaders) {
                 );
             }
 
+            // 2b. Evento outbox para emitir nota crédito en Factus (DIAN)
+            const invoiceResult = await invoiceRepository.findByVentaWithFactus(orderId);
+            const invoice = invoiceResult.rows[0];
+            if (invoice && invoice.factus_invoice_number) {
+                await orderRepository.insertOutboxEvent(
+                    'factus.credit_note',
+                    {
+                        orderId: Number(orderId),
+                        billNumber: invoice.factus_invoice_number,
+                        invoiceId: invoice.id,
+                        montofinal_vent: order.montofinal_vent,
+                        metodopago_usu: order.metodopago_usu,
+                    },
+                    client
+                );
+            } else {
+                logger.warn('Reembolso: no se encontró factura Factus para emitir NC', { orderId });
+            }
+
             await client.query('COMMIT');
-            logger.info('Reembolso encolado vía Outbox', { orderId, items: order.items.length });
+            logger.info('Reembolso encolado vía Outbox (inventario + NC Factus)', { orderId, items: order.items.length });
             return { ok: true, data: updated.rows[0] };
         } catch (err) {
             await client.query('ROLLBACK');
