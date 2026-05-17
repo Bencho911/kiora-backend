@@ -8,9 +8,13 @@ const createSupplierSchema = Joi.object({
         'string.max': 'nom_prov no debe exceder 100 caracteres.',
     }),
     id_prov: Joi.string().max(50).allow('', null).optional(),
-    tel_prov: Joi.string().max(20).allow('', null).optional(),
+    tel_prov: Joi.string().max(20).required().messages({
+        'any.required': 'tel_prov es obligatorio.'
+    }),
     tipoid_prov: Joi.string().max(20).allow('', null).optional(),
-    correo_prov: Joi.string().max(100).allow('', null).optional(),
+    correo_prov: Joi.string().max(100).required().messages({
+        'any.required': 'correo_prov es obligatorio.'
+    }),
     dir_prov: Joi.string().max(200).allow('', null).optional(),
 });
 
@@ -32,9 +36,8 @@ const createMovementSchema = Joi.object({
         'any.required': 'tipo_mov es obligatorio.',
         'any.only': "tipo_mov debe ser 'entrada', 'salida' o 'ajuste'.",
     }),
-    cantidad: Joi.number().integer().greater(0).required().messages({
+    cantidad: Joi.number().integer().required().messages({
         'any.required': 'cantidad es obligatorio.',
-        'number.greater': 'cantidad debe ser mayor a 0.',
         'number.integer': 'cantidad debe ser un número entero.',
     }),
     cod_prod: Joi.number().integer().required().messages({
@@ -43,6 +46,7 @@ const createMovementSchema = Joi.object({
     fecha_mov: Joi.date().iso().allow(null).optional(),
     fk_cod_prov: Joi.number().integer().allow(null).optional(),
     fk_id_vent: Joi.number().integer().allow(null).optional(),
+    fecha_vencimiento: Joi.date().iso().allow(null).optional(),
     desc_mov: Joi.string().max(255).required().messages({
         'any.required': 'La justificación (desc_mov) es obligatoria.',
         'string.empty': 'La justificación no puede estar vacía.',

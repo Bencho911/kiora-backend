@@ -66,6 +66,26 @@ services:
       timeout: 5s
       retries: 5
 
+  notifications-db:
+    image: postgres:16-alpine
+    container_name: kiora_notifications_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      POSTGRES_DB: kiora_notifications
+    ports:
+      - "5437:5432"
+    networks:
+      - kiora-backend-net
+    volumes:
+      - notifications_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_notifications"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   orders-db:
     image: postgres:16-alpine
     container_name: kiora_orders_db
@@ -107,7 +127,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # pgAdmin — interfaz visual (se conecta a los 4 databases)
+  # pgAdmin — interfaz visual (se conecta a los 5 databases)
   kiora-pgadmin:
     image: dpage/pgadmin4
     container_name: kiora_pgadmin
@@ -126,6 +146,7 @@ services:
       - products-db
       - inventory-db
       - orders-db
+      - notifications-db
 
   # ─────────────────────────────────────────────
   # MICROSERVICIOS
@@ -171,7 +192,10 @@ services:
     environment:
       DB_HOST: users-db
       DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpassword}
       DB_NAME: kiora_users
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@users-db:5432/kiora_users
       REDIS_HOST: kiora-redis
       REDIS_PORT: 6379
       OTEL_SERVICE_NAME: users-service
@@ -197,7 +221,10 @@ services:
     environment:
       DB_HOST: products-db
       DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpassword}
       DB_NAME: kiora_products
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@products-db:5432/kiora_products
       REDIS_HOST: kiora-redis
       OTEL_SERVICE_NAME: products-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
@@ -220,7 +247,10 @@ services:
     environment:
       DB_HOST: inventory-db
       DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpassword}
       DB_NAME: kiora_inventory
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@inventory-db:5432/kiora_inventory
       REDIS_HOST: kiora-redis
       REDIS_PORT: 6379
       ADMIN_EMAIL: ruben.camilo321@gmail.com
@@ -246,7 +276,10 @@ services:
     environment:
       DB_HOST: orders-db
       DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpassword}
       DB_NAME: kiora_orders
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@orders-db:5432/kiora_orders
       INVENTORY_SERVICE_URL: http://inventory-service:3003
       OTEL_SERVICE_NAME: orders-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
@@ -267,9 +300,17 @@ services:
     env_file:
       - ./services/notifications-service/.env.docker
     environment:
+      DB_HOST: notifications-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      DB_NAME: kiora_notifications
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@notifications-db:5432/kiora_notifications
       REDIS_HOST: kiora-redis
       REDIS_PORT: 6379
     depends_on:
+      notifications-db:
+        condition: service_healthy
       kiora-redis:
         condition: service_healthy
 
@@ -302,6 +343,8 @@ services:
       - "4318:4318"     # OTLP HTTP receiver
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - kiora-backend-net
 
   # Prometheus — Métricas
   prometheus:
@@ -316,6 +359,8 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.retention.time=7d'
+    networks:
+      - kiora-backend-net
 
   # Grafana — Dashboards
   grafana:
@@ -327,6 +372,8 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
+    networks:
+      - kiora-backend-net
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -349,6 +396,7 @@ volumes:
   products_db_data:
   inventory_db_data:
   orders_db_data:
+  notifications_db_data:
   redis_data:
   pgadmin_data:
   prometheus_data:

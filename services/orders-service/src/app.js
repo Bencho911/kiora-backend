@@ -24,11 +24,32 @@ app.post(
 // Body parser global para el resto de rutas
 app.use(express.json());
 
+// ── Correlation ID (AsyncLocalStorage) — DEBE IR ANTES de cualquier ruta ──
+const correlationMiddleware = require('./middlewares/correlationMiddleware');
+app.use(correlationMiddleware);
+
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'orders-service' }));
 
 // ── Métricas (Prometheus) ─────────────────────────────────────────────────
 const promClient = require('prom-client');
 promClient.collectDefaultMetrics({ prefix: 'orders_' });
+
+// Histograma de latencia por ruta para p95/p99
+const httpDuration = new promClient.Histogram({
+    name: 'orders_http_request_duration_seconds',
+    help: 'Duración de requests HTTP en orders-service',
+    labelNames: ['method', 'route', 'status_code'],
+    buckets: [0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5],
+});
+
+app.use((req, res, next) => {
+    const end = httpDuration.startTimer();
+    res.on('finish', () => {
+        end({ method: req.method, route: req.route?.path || req.path, status_code: res.statusCode });
+    });
+    next();
+});
+
 app.get('/metrics', async (_req, res) => {
     res.set('Content-Type', promClient.register.contentType);
     res.end(await promClient.register.metrics());
@@ -53,10 +74,11 @@ app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 
 // ── Rutas ─────────────────────────────────────────────────────────────────
-// IMPORTANTE: invoices debe ir ANTES de /:id para evitar conflicto de rutas
+// IMPORTANTE: invoices y settlement deben ir ANTES de /:id para evitar conflicto de rutas
 app.use('/api/invoices', require('./routes/invoiceRoutes'));
 app.use('/api/orders/checkout', require('./routes/paymentRoutes'));
 app.use('/api/orders/export',   require('./routes/exportRoutes'));
+app.use('/api/orders/settlement', require('./routes/settlementRoutes'));
 app.use('/api/orders',          require('./routes/orderRoutes'));
 
 // eslint-disable-next-line no-unused-vars

@@ -16,9 +16,13 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --from=base /app/node_modules ./node_modules
 COPY . .
 
+# Pre-crear carpeta si necesita y dar permisos
+RUN chown -R appuser:appgroup /app && \
+    chmod +x entrypoint.sh
+
 # No correr como root
 USER appuser
 
 EXPOSE 3001
 
-CMD ["node", "src/index.js"]
+ENTRYPOINT ["/app/entrypoint.sh"]

@@ -9,7 +9,11 @@
     "test": "jest --runInBand",
     "audit:ci": "npm audit --audit-level=high",
     "lint": "eslint src --max-warnings 0",
-    "lint:fix": "eslint src --fix --max-warnings 0"
+    "lint:fix": "eslint src --fix --max-warnings 0",
+    "migrate": "node-pg-migrate --migrations-dir src/db/migrations --no-pg-native",
+    "migrate:up": "npm run migrate up",
+    "migrate:down": "npm run migrate down",
+    "migrate:up:docker": "npm run migrate up"
   },
   "keywords": [],
   "author": "",
@@ -22,7 +26,11 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.10.0",
     "joi": "^18.0.2",
+    "node-pg-migrate": "^8.0.4",
     "nodemailer": "^8.0.3",
+    "pg": "^8.20.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "winston": "^3.19.0"
   },
   "devDependencies": {

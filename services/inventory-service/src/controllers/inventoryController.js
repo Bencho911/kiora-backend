@@ -126,11 +126,11 @@ const getMovements = async (req, res, next) => {
 
 // POST /api/inventory/movements
 const createMovement = async (req, res, next) => {
-    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov } = req.body;
+    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento } = req.body;
 
     try {
         const movement = await inventoryService.registerMovement({
-            tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov
+            tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento
         }, req.headers);
         res.status(201).json(movement);
     } catch (error) {
@@ -199,7 +199,7 @@ const upsertSuministra = async (req, res, next) => {
 
         logger.info('Suministra actualizado', { id: row.id, cod_prod, stock: row.stock });
 
-        const lowStock = row.stock < row.stock_minimo;
+        const lowStock = row.stock <= row.stock_minimo;
         if (lowStock) {
             await directEmailService.sendLowStockEmail({
                 cod_prod: row.cod_prod,

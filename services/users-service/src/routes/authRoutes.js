@@ -5,7 +5,7 @@ const { verifyToken, isAdmin } = require('../middleware/authMiddleware');
 const validate = require('../middleware/validate');
 const { loginSchema, registerSchema, updateUserSchema, updateRoleSchema, forgotPasswordSchema, verifyResetCodeSchema, resetPasswordSchema, changePasswordSchema } = require('../validators/authValidators');
 const {
-    register, login, refresh, logout, unlockUser, getUsers, getMe,
+    register, login, refresh, logout, unlockUser, blockUser, getUsers, getMe,
     updateUser, deleteUser, updateRole, forgotPassword, verifyResetCode, resetPassword, changePassword,
     adminResetPassword
 } = require('../controllers/authController');
@@ -213,6 +213,7 @@ router.get('/users', verifyToken, isAdmin, getUsers);
  *         description: Redis no disponible (BLACKLIST_FAIL_OPEN=false).
  */
 router.patch('/users/:id/unlock', verifyToken, isAdmin, unlockUser);
+router.patch('/users/:id/block', verifyToken, isAdmin, blockUser);
 
 /**
  * @swagger

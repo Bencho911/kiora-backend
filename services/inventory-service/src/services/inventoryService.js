@@ -54,25 +54,26 @@ const productsBreaker = createCircuitBreaker(
  * @param {Object} reqHeaders - Encabezados originales para propagar
  */
 async function registerMovement(movementData, reqHeaders) {
-    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov } = movementData;
+    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento } = movementData;
 
     // Delta único: se usa tanto para Suministra como para products-service
-    const stockDelta = tipo_mov === 'entrada' ? Number(cantidad) : -Number(cantidad);
+    const stockDelta = (tipo_mov === 'entrada' || tipo_mov === 'ajuste') ? Number(cantidad) : -Number(cantidad);
 
     // 1. Guardar historial en tabla Inventario
     const result = await inventoryRepository.createMovement({
-        tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov
+        tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento
     });
     const movement = result.rows[0];
     logger.info('Movimiento registrado', { id_mov: movement.id_mov, tipo_mov, cod_prod });
 
     // 2. Actualizar stock en Suministra + verificar alertas
     try {
-        const stockRes = await inventoryRepository.updateStock(cod_prod, stockDelta, fk_cod_prov);
+        const updateVencimiento = tipo_mov === 'entrada' ? fecha_vencimiento : null;
+        const stockRes = await inventoryRepository.updateStock(cod_prod, stockDelta, fk_cod_prov, updateVencimiento);
         
         if (stockRes && stockRes.rows.length > 0) {
             const row = stockRes.rows[0];
-            if (row.stock < row.stock_minimo) {
+            if (row.stock <= row.stock_minimo) {
                 logger.warn('Stock bajo detectado. Enviando alerta...', { cod_prod, stock: row.stock });
                 
                 await directEmailService.sendLowStockEmail({
@@ -93,47 +94,31 @@ async function registerMovement(movementData, reqHeaders) {
     }
 
     // 3. Sincronización reactiva con products-service vía circuit breaker
+    // No se reintenta manualmente: el circuit breaker maneja fail-fast y
+    // reapertura automática. La operación de inventario ya quedó registrada
+    // en el paso 1, por lo que la sincronización es "best effort".
     const headers = outgoingHeaders(reqHeaders);
-    const MAX_RETRIES = 3;
-    let synced = false;
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-            const syncRes = await productsBreaker.fire(
-                `${env.productsServiceUrl}/api/products/${cod_prod}/stock`,
-                { cantidad: stockDelta },
-                headers
-            );
-            const stockData = await syncRes.json();
-            logger.info('Stock sincronizado con products-service', {
-                cod_prod, stock_actual: stockData.stock_actual, attempt,
-            });
-            synced = true;
-            break;
-        } catch (err) {
-            if (err.status === 409) {
-                logger.warn('Stock insuficiente en products-service', { cod_prod });
-                break;
-            }
-            if (err.code === 'CIRCUIT_OPEN') {
-                logger.error('Circuit breaker abierto, no se puede sincronizar stock', { cod_prod });
-                break;
-            }
-            logger.warn(`Intento ${attempt}/${MAX_RETRIES}: fallo al sincronizar stock`, {
+    try {
+        const syncRes = await productsBreaker.fire(
+            `${env.productsServiceUrl}/api/products/${cod_prod}/stock`,
+            { cantidad: stockDelta },
+            headers
+        );
+        const stockData = await syncRes.json();
+        logger.info('Stock sincronizado con products-service', {
+            cod_prod, stock_actual: stockData.stock_actual,
+        });
+    } catch (err) {
+        if (err.status === 409) {
+            logger.warn('Stock insuficiente en products-service', { cod_prod });
+        } else if (err.code === 'CIRCUIT_OPEN') {
+            logger.error('Circuit breaker abierto, no se pudo sincronizar stock', { cod_prod });
+        } else {
+            logger.error('Fallo al sincronizar stock con products-service', {
                 cod_prod, error: err.message,
             });
         }
-
-        if (attempt < MAX_RETRIES) {
-            const delay = 500 * Math.pow(2, attempt - 1) * (0.5 + Math.random());
-            await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-    }
-
-    if (!synced) {
-        logger.error('FALLO DEFINITIVO: No se pudo sincronizar stock', {
-            cod_prod, id_mov: movement.id_mov,
-        });
     }
 
     return movement;

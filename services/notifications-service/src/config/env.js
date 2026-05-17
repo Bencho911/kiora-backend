@@ -8,16 +8,23 @@ const REQUIRED_VARS = [
     'SMTP_USER',
     'SMTP_PASS',
     'FROM_EMAIL',
+    'DB_HOST',
+    'DB_PORT',
+    'DB_NAME',
 ];
 
 const missing = REQUIRED_VARS.filter((v) => !process.env[v]);
 
 if (missing.length > 0) {
-    console.error(
-        `[env] Faltan variables de entorno requeridas: ${missing.join(', ')}\n` +
-        'Copia .env.example → .env.local y completa los valores.'
-    );
-    process.exit(1);
+    const errorMsg = `[env] Faltan variables de entorno requeridas: ${missing.join(', ')}\n` +
+                   'Copia .env.example → .env.local y completa los valores.';
+    
+    if (process.env.NODE_ENV === 'test') {
+        console.warn(errorMsg);
+    } else {
+        console.error(errorMsg);
+        process.exit(1);
+    }
 }
 
 module.exports = {
@@ -37,6 +44,13 @@ module.exports = {
         pass: process.env.SMTP_PASS,
         secure: process.env.SMTP_SECURE === 'true',
         from: process.env.FROM_EMAIL,
+    },
+    db: {
+        host: process.env.DB_HOST,
+        port: Number(process.env.DB_PORT),
+        name: process.env.DB_NAME,
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || 'rootpassword',
     },
     nodeEnv: process.env.NODE_ENV || 'development',
 };

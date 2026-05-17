@@ -23,7 +23,7 @@ function getStripe() {
  * @param {Array} items Lista de items comprados para mostrar en Stripe
  * @returns {Promise<string>} La URL generada para pagar
  */
-const createCheckoutSession = async (order, items) => {
+const createCheckoutSession = async (order, items, successUrl = null, cancelUrl = null) => {
     try {
         const session = await getStripe().checkout.sessions.create({
             payment_method_types: ['card'],
@@ -38,8 +38,8 @@ const createCheckoutSession = async (order, items) => {
                 quantity: item.cantidad,
             })),
             mode: 'payment',
-            success_url: 'http://localhost:5173/payment-success?order_id=' + order.id_vent,
-            cancel_url: 'http://localhost:5173/payment-cancel?order_id=' + order.id_vent,
+            success_url: successUrl || 'http://localhost:5173/payment-success?order_id=' + order.id_vent,
+            cancel_url: cancelUrl || 'http://localhost:5173/payment-cancel?order_id=' + order.id_vent,
             client_reference_id: String(order.id_vent),
             metadata: {
                 order_id: String(order.id_vent),

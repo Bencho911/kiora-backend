@@ -97,4 +97,23 @@ const deleteOrder = async (req, res, next) => {
     }
 };
 
-module.exports = { getOrders, getOrderById, createOrder, updateOrderStatus, deleteOrder };
+// GET /api/orders/stats
+const getStats = async (req, res, next) => {
+    try {
+        const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
+        const result = await orderRepository.getStats(fecha);
+        const row = result.rows[0] || { total_ventas: 0, monto_total: 0, ticket_promedio: 0, ultima_venta: null };
+        res.status(200).json({
+            fecha,
+            ventas_hoy: Number(row.total_ventas),
+            monto_total: Number(row.monto_total).toFixed(2),
+            ticket_promedio: Number(row.ticket_promedio).toFixed(2),
+            ultima_venta: row.ultima_venta || null,
+        });
+    } catch (error) {
+        logger.error('Error al obtener stats', { error: error.message });
+        next(error);
+    }
+};
+
+module.exports = { getOrders, getOrderById, getStats, createOrder, updateOrderStatus, deleteOrder };

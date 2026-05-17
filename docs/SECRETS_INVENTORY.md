@@ -1,3 +1,9 @@
+---
+title: "Inventario de Secretos"
+tags: [seguridad, secrets, devops]
+---
+[[Home]] > **Inventario de Secretos**
+
 # Inventario y gobierno de secretos (Kiora)
 
 **Este archivo no contiene secretos.** Es una guía y plantilla para que el equipo mantenga el inventario **fuera del repositorio** (1Password, Vault de cloud, Notion privado, etc.).

@@ -105,6 +105,8 @@ const options = {
                         fecha_mov: { type: 'string',  format: 'date', example: '2026-03-31' },
                         cantidad:  { type: 'integer', example: 50 },
                         cod_prod:  { type: 'integer', example: 1 },
+                        fk_id_vent: { type: 'integer' },
+                        fecha_vencimiento: { type: 'string', format: 'date', description: 'Fecha de caducidad del lote (solo para entradas)' }
                     },
                 },
                 MovimientoInput: {
@@ -115,6 +117,7 @@ const options = {
                         cantidad:  { type: 'integer', minimum: 1, example: 50 },
                         cod_prod:  { type: 'integer', example: 1 },
                         fecha_mov: { type: 'string',  format: 'date', example: '2026-03-31' },
+                        fecha_vencimiento: { type: 'string', format: 'date', example: '2027-12-31' },
                     },
                 },
                 Suministra: {

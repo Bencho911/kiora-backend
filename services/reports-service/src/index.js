@@ -1,4 +1,5 @@
 require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH || '.env.local' });
+require('./config/env');  // Valida variables de entorno antes de arrancar
 const app = require('./app');
 const logger = require('./config/logger');
 
