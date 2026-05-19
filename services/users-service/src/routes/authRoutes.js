@@ -7,7 +7,7 @@ const { loginSchema, registerSchema, updateUserSchema, updateRoleSchema, forgotP
 const {
     register, login, refresh, logout, unlockUser, blockUser, getUsers, getMe,
     updateUser, deleteUser, updateRole, forgotPassword, verifyResetCode, resetPassword, changePassword,
-    adminResetPassword
+    adminResetPassword, getAdminEmails
 } = require('../controllers/authController');
 
 const isTestEnv = process.env.NODE_ENV === 'test';
@@ -189,6 +189,7 @@ router.post('/logout', verifyToken, logout);
  *         description: Redis no disponible (BLACKLIST_FAIL_OPEN=false).
  */
 router.get('/users', verifyToken, isAdmin, getUsers);
+router.get('/users/admins', getAdminEmails);
 
 /**
  * @swagger

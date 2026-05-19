@@ -247,6 +247,9 @@ app.use('/api/notifications', transparentProxy('notifications-service', services
 app.use('/api/reports', transparentProxy('reports-service', services.reports));
 app.use('/api/incidents', transparentProxy('users-service', services.users));
 
+// ── Imágenes subidas (proxy a products-service) ──────────────────────────
+app.use('/uploads', transparentProxy('products-service', services.products));
+
 // ── Health checks ─────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'API Gateway is running' });

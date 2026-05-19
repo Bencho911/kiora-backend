@@ -8,6 +8,8 @@ const swaggerSpec = require('./config/swagger');
 const env        = require('./config/env');
 const logger     = require('./config/logger');
 
+const path = require('path');
+
 const app = express();
 
 // ── Seguridad y parseo ───────────────────────────────────────────────────
@@ -16,6 +18,9 @@ app.use(helmet({
 }));
 app.use(cors({ origin: env.corsOrigin, credentials: true }));
 app.use(express.json());
+
+// ── Archivos estáticos (imágenes subidas localmente) ─────────────────────
+app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 // ── Correlation ID (AsyncLocalStorage) — DEBE IR ANTES de cualquier ruta ──
 const correlationMiddleware = require('./middlewares/correlationMiddleware');

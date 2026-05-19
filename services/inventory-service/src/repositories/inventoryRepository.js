@@ -90,12 +90,15 @@ const findSuministraById = (id) =>
 
 /**
  * Actualiza el stock sumando o restando un delta.
- * Si no se especifica proveedor, se intenta actualizar el primer registro encontrado para el producto.
+ * Si no existe registro en Suministra, lo crea automáticamente (upsert)
+ * para que las alertas de stock bajo funcionen siempre.
  */
 const updateStock = (cod_prod, delta, fk_cod_prov = null, fecha_vencimiento = null) => {
+    // Usar proveedor por defecto (1 = Distribuidora Andina) si no se especifica
+    const supplierId = fk_cod_prov || 1;
     let vencimientoSet = '';
-    const params = [delta, cod_prod];
-    let paramIndex = 3;
+    const params = [supplierId, cod_prod, delta];
+    let paramIndex = 4;
 
     if (fecha_vencimiento) {
         vencimientoSet = `, fecha_vencimiento = $${paramIndex}`;
@@ -103,15 +106,12 @@ const updateStock = (cod_prod, delta, fk_cod_prov = null, fecha_vencimiento = nu
         paramIndex++;
     }
 
-    if (fk_cod_prov) {
-        params.push(fk_cod_prov);
-        return db.query(
-            `UPDATE Suministra SET stock = stock + $1${vencimientoSet} WHERE cod_prod = $2 AND fk_cod_prov = $${paramIndex - 1} RETURNING *`,
-            params
-        );
-    }
     return db.query(
-        `UPDATE Suministra SET stock = stock + $1${vencimientoSet} WHERE id = (SELECT id FROM Suministra WHERE cod_prod = $2 LIMIT 1) RETURNING *`,
+        `INSERT INTO Suministra (fk_cod_prov, cod_prod, stock, stock_minimo)
+         VALUES ($1, $2, GREATEST(0, $3), 0)
+         ON CONFLICT (fk_cod_prov, cod_prod)
+         DO UPDATE SET stock = GREATEST(0, Suministra.stock + $3)${vencimientoSet}
+         RETURNING *`,
         params
     );
 };

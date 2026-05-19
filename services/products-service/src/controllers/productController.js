@@ -64,7 +64,11 @@ const getProductById = async (req, res, next) => {
 // POST /api/products  (HU10)
 const createProduct = async (req, res, next) => {
     const { nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo } = req.body;
-    const url_imagen = req.file ? (req.file.path || null) : null;
+    const url_imagen = req.file
+        ? (req.file.path?.startsWith('http')
+            ? req.file.path
+            : `/uploads/${req.file.filename}`)
+        : null;
 
     let parsedCats = [];
     if (fk_cod_cats) {
@@ -111,8 +115,10 @@ const updateProduct = async (req, res, next) => {
     try {
         const fields = { ...req.body };
 
-        if (req.file && req.file.path) {
-            fields.url_imagen = req.file.path;
+        if (req.file) {
+            fields.url_imagen = req.file.path?.startsWith('http')
+                ? req.file.path
+                : `/uploads/${req.file.filename}`;
         }
 
         if (fields.precio_unitario !== undefined) fields.precio_unitario = Number(fields.precio_unitario);
@@ -211,14 +217,17 @@ const updateStock = async (req, res, next) => {
             // Enviar notificación en tiempo real vía Redis Stream (payload JSON estructurado)
             const redisClient = cacheService.getRedis();
             if (redisClient) {
+                const adminEmails = process.env.ADMIN_EMAIL || 'admin@kiora.com';
                 const payload = JSON.stringify({
-                    to: process.env.ADMIN_EMAIL || 'admin@kiora.com',
+                    to: adminEmails,
                     subject: '⚠️ Alerta: Stock Crítico (Actualización Directa)',
-                    event_type: 'CRITICAL_STOCK_UPDATE',
-                    cod_prod: id,
-                    nom_prod: producto.nom_prod,
-                    stock_actual: producto.stock_actual,
-                    stock_minimo: producto.stock_minimo
+                    html: `<div style="font-family:sans-serif;padding:20px;">
+                        <h2 style="color:#C41E1E;">⚠️ Stock Crítico Detectado</h2>
+                        <p>Producto: <strong>${producto.nom_prod || 'ID #' + id}</strong></p>
+                        <p>Stock Actual: <strong style="color:#C41E1E;">${producto.stock_actual}</strong></p>
+                        <p>Stock Mínimo: <strong>${producto.stock_minimo}</strong></p>
+                        <hr><p style="color:#888;">Actualización directa desde products-service</p>
+                    </div>`,
                 });
                 redisClient.xadd('kiora:notifications:stream', '*', 'payload', payload).catch(err => {
                     logger.error('Error al enviar alerta a Redis', { error: err.message });

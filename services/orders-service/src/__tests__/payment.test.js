@@ -5,8 +5,8 @@
  *
  * Verifica que handleStripeWebhook:
  * - Rechaza firmas inválidas con 400
- * - Inserta evento outbox en lugar de llamar HTTP a inventory
- * - Usa transacción BD atómica (BEGIN/COMMIT o ROLLBACK en error)
+ * - Completa la orden automáticamente (status → completada + outbox events)
+ * - Guarda stripe_payment_id para reembolsos futuros
  */
 
 process.env.NODE_ENV = 'test';
@@ -17,15 +17,20 @@ process.env.DB_PORT = '5432';
 process.env.DB_NAME = 'test';
 
 const stripeService = require('../services/stripeService');
-const mockClient = {
-    query: jest.fn().mockResolvedValue({ rows: [] }),
-    release: jest.fn(),
-};
+const orderRepository = require('../repositories/orderRepository');
+const invoiceRepository = require('../repositories/invoiceRepository');
+
+// Mock de repositorios para completeOrder
+jest.mock('../repositories/orderRepository');
+jest.mock('../repositories/invoiceRepository');
 
 jest.mock('../config/db', () => ({
     query: jest.fn(),
-    connect: jest.fn().mockResolvedValue(mockClient),
+    connect: jest.fn(), // Se asigna en beforeEach
 }));
+
+const db = require('../config/db');
+let mockClient;
 
 const request = require('supertest');
 const app = require('../app');
@@ -33,12 +38,29 @@ const app = require('../app');
 describe('Stripe Webhook (handleStripeWebhook)', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        mockClient.query.mockReset();
-        mockClient.query.mockResolvedValue({ rows: [] });
+        mockClient = { query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() };
+        db.connect.mockResolvedValue(mockClient);
+
+        // Mock de findByIdWithItems: orden pendiente con 2 items
+        orderRepository.findByIdWithItems.mockResolvedValue({
+            id_vent: 42,
+            estado: 'pendiente',
+            montofinal_vent: 500,
+            items: [
+                { cod_prod: 'PROD-001', cantidad: 2, precio_unit: 100 },
+                { cod_prod: 'PROD-002', cantidad: 1, precio_unit: 300 },
+            ],
+        });
+
+        orderRepository.updateStatus.mockResolvedValue({
+            rows: [{ id_vent: 42, estado: 'completada', montofinal_vent: 500 }],
+        });
+
+        orderRepository.insertOutboxEvent.mockResolvedValue({ rows: [{ id: 1 }] });
+        invoiceRepository.create.mockResolvedValue({ rows: [{ id_fact: 1 }] });
     });
 
     test('400 cuando la firma es inválida', async () => {
-        // StripeService lanza error de firma
         jest.spyOn(stripeService, 'verifyWebhookSignature').mockImplementationOnce(() => {
             throw new Error('Invalid signature');
         });
@@ -52,7 +74,7 @@ describe('Stripe Webhook (handleStripeWebhook)', () => {
         expect(res.text).toContain('Webhook Error');
     });
 
-    test('200 + outbox event insertado en transacción cuando el pago es exitoso', async () => {
+    test('200 – completa la orden y guarda payment info', async () => {
         const fakeEvent = {
             type: 'checkout.session.completed',
             data: {
@@ -65,6 +87,7 @@ describe('Stripe Webhook (handleStripeWebhook)', () => {
         };
 
         jest.spyOn(stripeService, 'verifyWebhookSignature').mockReturnValue(fakeEvent);
+        orderRepository.updatePaymentInfo = jest.fn().mockResolvedValue({ rows: [] });
 
         const res = await request(app)
             .post('/api/orders/checkout/webhook')
@@ -74,37 +97,45 @@ describe('Stripe Webhook (handleStripeWebhook)', () => {
         expect(res.status).toBe(200);
         expect(res.body.received).toBe(true);
 
+        // Verificar que completeOrder se ejecutó: findByIdWithItems + updateStatus
+        expect(orderRepository.findByIdWithItems).toHaveBeenCalledWith('42');
+        expect(orderRepository.updateStatus).toHaveBeenCalledWith(
+            '42', 'completada', expect.any(Object)
+        );
+
+        // Verificar que se creó la factura
+        expect(invoiceRepository.create).toHaveBeenCalledWith(
+            expect.objectContaining({ fk_id_vent: '42' }),
+            expect.any(Object)
+        );
+
+        // Verificar outbox events: uno por cada ítem (inventory.movement) + factus.invoice
+        expect(orderRepository.insertOutboxEvent).toHaveBeenCalledTimes(3);
+        expect(orderRepository.insertOutboxEvent).toHaveBeenCalledWith(
+            'inventory.movement',
+            expect.objectContaining({ tipo_mov: 'salida', cod_prod: 'PROD-001' }),
+            expect.any(Object)
+        );
+        expect(orderRepository.insertOutboxEvent).toHaveBeenCalledWith(
+            'inventory.movement',
+            expect.objectContaining({ tipo_mov: 'salida', cod_prod: 'PROD-002' }),
+            expect.any(Object)
+        );
+        expect(orderRepository.insertOutboxEvent).toHaveBeenCalledWith(
+            'factus.invoice',
+            expect.objectContaining({ orderId: 42 }),
+            expect.any(Object)
+        );
+
         // Verificar transacción BD
         expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
-
-        // Verificar UPDATE de la venta
-        const updateCall = mockClient.query.mock.calls.find(
-            ([text]) => text.includes('UPDATE Ventas')
-        );
-        expect(updateCall).toBeDefined();
-        expect(updateCall[0]).toContain('UPDATE Ventas SET estado');
-        expect(updateCall[1]).toEqual(expect.arrayContaining(['pagado', 'stripe_tarjeta', 'pi_test_456', '42']));
-
-        // Verificar que se insertó evento outbox (NO fetch directo a inventory)
-        const outboxCall = mockClient.query.mock.calls.find(
-            ([text]) => text.includes('INSERT INTO outbox_events')
-        );
-        expect(outboxCall).toBeDefined();
-
-        const insertedPayload = JSON.parse(outboxCall[1][1]);
-        expect(outboxCall[1][0]).toBe('inventory.reserve.commit');
-        expect(insertedPayload).toEqual({ orderId: '42' });
-
         expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
 
-        // Verificar que NO hubo fetch a inventory
-        const inventoryFetchCalls = mockClient.query.mock.calls.filter(
-            ([, params]) => params && params.some(p => typeof p === 'string' && p.includes('/api/inventory/saga/reserve/commit'))
-        );
-        expect(inventoryFetchCalls).toHaveLength(0);
+        // Verificar que se guardó el stripe_payment_id
+        expect(orderRepository.updatePaymentInfo).toHaveBeenCalledWith('42', 'pi_test_456');
     });
 
-    test('ROLLBACK si ocurre error en la transacción', async () => {
+    test('ROLLBACK si ocurre error en completeOrder', async () => {
         const fakeEvent = {
             type: 'checkout.session.completed',
             data: {
@@ -118,8 +149,8 @@ describe('Stripe Webhook (handleStripeWebhook)', () => {
 
         jest.spyOn(stripeService, 'verifyWebhookSignature').mockReturnValue(fakeEvent);
 
-        // Simular error en el UPDATE
-        mockClient.query.mockRejectedValueOnce(new Error('DB connection lost'));
+        // Simular error en el updateStatus dentro de completeOrder
+        orderRepository.updateStatus.mockRejectedValueOnce(new Error('DB error'));
 
         const res = await request(app)
             .post('/api/orders/checkout/webhook')

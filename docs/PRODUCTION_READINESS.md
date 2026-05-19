@@ -38,7 +38,9 @@ Componentes funcionales y utilizables en producción con bajo tráfico, pero que
 *   **Notificaciones (`notifications-service`)**
     *   El encolamiento por Redis Streams es confiable, pero las plantillas actuales de email son muy básicas.
 *   **Pagos (Stripe Webhooks)**
-    *   Implementado y validado de extremo a extremo, pero en fase MVP. Todavía puede añadirse soporte a métodos de pago alternativos (Apple Pay, Google Pay).
+    *   Integración completa: checkout, webhook con `completeOrder` automático, reembolsos.
+    *   El webhook ahora ejecuta `completeOrder()` atómicamente al recibir confirmación de pago (estado → `completada`, factura, outbox inventory + factus), eliminando la necesidad de completar manualmente.
+    *   Pendiente: Apple Pay, Google Pay.
 
 ---
 

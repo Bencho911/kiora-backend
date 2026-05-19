@@ -228,6 +228,8 @@ services:
       REDIS_HOST: kiora-redis
       OTEL_SERVICE_NAME: products-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    volumes:
+      - products_uploads:/app/src/public/uploads
     depends_on:
       products-db:
         condition: service_healthy
@@ -255,6 +257,7 @@ services:
       REDIS_PORT: 6379
       ADMIN_EMAIL: ruben.camilo321@gmail.com
       PRODUCTS_SERVICE_URL: http://products-service:3002
+      USERS_SERVICE_URL: http://users-service:3001
       OTEL_SERVICE_NAME: inventory-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
@@ -382,6 +385,23 @@ services:
       - prometheus
       - jaeger
 
+  telegram-bot:
+    build:
+      context: ./services/telegram-bot
+      dockerfile: Dockerfile
+    container_name: kiora_telegram_bot
+    restart: unless-stopped
+    networks:
+      - kiora-backend-net
+    env_file:
+      - ./services/telegram-bot/.env.docker
+    environment:
+      REDIS_HOST: kiora-redis
+      REDIS_PORT: 6379
+      API_GATEWAY_URL: http://api-gateway:3000/api
+    depends_on:
+      kiora-redis:
+        condition: service_healthy
 
 networks:
   kiora-public-net:
@@ -394,6 +414,7 @@ networks:
 volumes:
   users_db_data:
   products_db_data:
+  products_uploads:
   inventory_db_data:
   orders_db_data:
   notifications_db_data:

@@ -24,11 +24,36 @@ function initTransporter() {
     logger.info('Motor de correo directo inicializado en inventory-service');
 }
 
+/**
+ * Obtiene los correos de todos los administradores desde users-service.
+ * La URL se configura via USERS_SERVICE_URL (default: http://users-service:3001).
+ */
+async function getAdminEmails() {
+    const baseUrl = process.env.USERS_SERVICE_URL || 'http://users-service:3001';
+    try {
+        const res = await fetch(`${baseUrl}/api/auth/users/admins`, {
+            signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return data.emails || [];
+    } catch (err) {
+        logger.warn('No se pudieron obtener correos de administradores', { error: err.message });
+        return [];
+    }
+}
+
 async function sendLowStockEmail(productData, toOverride = null) {
     if (!transporter) initTransporter();
     if (!transporter) return;
 
-    const to = toOverride || process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+    // Obtener destinatarios: admins del sistema o fallback a variable de entorno
+    let recipients = toOverride ? [toOverride] : await getAdminEmails();
+    if (recipients.length === 0) {
+        recipients = [process.env.ALERT_EMAIL || process.env.SMTP_USER].filter(Boolean);
+    }
+    if (recipients.length === 0) return;
+
     const subject = `⚠️ ALERTA DE STOCK: ${productData.nom_prod || 'Producto ID: ' + productData.cod_prod}`;
     
     const html = `
@@ -78,11 +103,11 @@ async function sendLowStockEmail(productData, toOverride = null) {
     try {
         await transporter.sendMail({
             from: `"Kiora Admin" <${process.env.SMTP_USER}>`,
-            to,
+            to: recipients.join(', '),
             subject,
             html
         });
-        logger.info('Email de alerta enviado DIRECTAMENTE desde inventory-service', { to });
+        logger.info('Email de alerta enviado DIRECTAMENTE desde inventory-service', { to: recipients });
     } catch (error) {
         logger.error('Error al enviar email directo desde inventory-service', { error: error.message });
     }

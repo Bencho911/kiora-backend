@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/DEGRADATION_MATRIX.md",
+                "file": "docs/SECRETS_INVENTORY.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "DEGRADATION_MATRIX"
+              "title": "SECRETS_INVENTORY"
             }
           }
         ]
@@ -185,21 +185,24 @@
   },
   "active": "313072fd491a685e",
   "lastOpenFiles": [
-    "services/orders-service/src/__tests__/outboxPoller.test.js",
-    "services/notifications-service/entrypoint.sh",
-    "services/orders-service/src/db/migrations/006_add_factus_invoice_number.sql",
-    "services/reports-service/src/services/factusService.js.tmp.897729.000de6e507a1",
-    "services/reports-service/src/config/env.js.tmp.897729.3356ce3aa491",
-    "services/reports-service/src/services/factusService.js.tmp.897729.03e4fef3879d",
-    "services/reports-service/src/config/env.js.tmp.897729.71f7f6c69e37",
-    "services/reports-service/src/config/env.js.tmp.897729.a95d6988e973",
-    "services/reports-service/src/config/env.js.tmp.897729.32feea505c2c",
-    "services/reports-service/src/services/factusService.js.tmp.897729.566d6b9f018b",
-    "services/reports-service/src/services/factusService.js.tmp.897729.8542bf2b8cb0",
-    "docs/Home.md",
-    "docs/Arquitectura_Datos.md",
+    "services/telegram-bot/src/index.js.tmp.18593.4b0d3f218f7b",
+    "services/telegram-bot/package-lock.json",
+    "docker-compose.yml.tmp.18593.bae3e83a8c27",
+    "services/telegram-bot/Dockerfile",
+    "services/telegram-bot/Dockerfile.tmp.18593.a001638b5d3d",
+    "services/telegram-bot/src/index.js",
+    "services/telegram-bot/src/index.js.tmp.18593.0e087b179e4b",
+    "services/telegram-bot/package.json",
+    "services/telegram-bot/package.json.tmp.18593.e1dd2ed9a4f0",
+    "services/telegram-bot/src",
+    "services/telegram-bot",
     "docs/PRODUCTION_READINESS.md",
+    "docs/INTER_SERVICE_CONTRACTS.md",
+    "docs/Home.md",
     "docs/DEGRADATION_MATRIX.md",
+    "docs/CodeGraph.md",
+    "docs/AZURE_VM_DEPLOYMENT.md",
+    "docs/Arquitectura_Datos.md",
     "services/notifications-service/README.md",
     "services/api-gateway/node_modules/socket.io/Readme.md",
     "services/api-gateway/node_modules/caniuse-lite/README.md",
@@ -218,9 +221,6 @@
     "services/api-gateway/node_modules/base64id/CHANGELOG.md",
     "services/api-gateway/node_modules/basic-auth/README.md",
     "services/api-gateway/node_modules/array-flatten/README.md",
-    "services/api-gateway/node_modules/basic-auth/HISTORY.md",
-    "services/api-gateway/node_modules/engine.io-parser/Readme.md",
-    "services/api-gateway/node_modules/eventemitter3/README.md",
     "services/api-gateway/node_modules/swagger-ui-dist/favicon-32x32.png",
     "services/api-gateway/node_modules/swagger-ui-dist/favicon-16x16.png",
     "services/api-gateway/node_modules/@jest/reporters/assets/jest_logo.png",

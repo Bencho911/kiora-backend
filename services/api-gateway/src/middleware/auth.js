@@ -38,6 +38,7 @@ const PUBLIC_PREFIXES = [
     '/api/v1/users/health',
     '/api/v1/users/ready',
     '/api/orders/checkout/webhook', // Webhooks de Stripe (externo)
+    '/uploads',             // Imágenes de productos (acceso público)
 ];
 
 const isPublicRoute = (path) =>

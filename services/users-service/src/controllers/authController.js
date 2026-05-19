@@ -491,6 +491,18 @@ const blockUser = async (req, res, next) => {
     }
 };
 
+// GET /api/users/admins — devuelve correos de todos los admins (para notificaciones)
+const getAdminEmails = async (_req, res, next) => {
+    try {
+        const result = await userRepository.findAdmins();
+        const emails = result.rows.map(r => r.correo_usu);
+        res.status(200).json({ emails });
+    } catch (error) {
+        logger.error('Error al obtener admins', { error: error.message });
+        next(error);
+    }
+};
+
 module.exports = {
     register,
     login,
@@ -508,4 +520,5 @@ module.exports = {
     resetPassword,
     changePassword,
     adminResetPassword,
+    getAdminEmails,
 };

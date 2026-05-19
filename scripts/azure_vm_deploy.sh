@@ -26,9 +26,8 @@ echo ""
 echo "[1/3] Copiando el proyecto a la Máquina Virtual..."
 echo "   (Esto puede tomar unos segundos, ignorando archivos pesados como node_modules...)"
 
-# Usamos rsync para copiar todo excepto carpetas pesadas y archivos .env
+# Usamos rsync para copiar todo excepto carpetas pesadas (ahora sube los .env)
 rsync -avz --exclude 'node_modules' --exclude '.git' --exclude 'dist' \
-  --exclude '.env' --exclude '.env.local' --exclude '.env.docker' \
   -e "ssh -o StrictHostKeyChecking=no" \
   ./ "$ADMIN_USER@$PUBLIC_IP:~/kiora-backend/" > /dev/null
 

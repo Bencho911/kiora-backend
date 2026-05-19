@@ -111,6 +111,17 @@ const updateStatus = (id_vent, estado, client = db) =>
         [estado, id_vent]
     );
 
+/**
+ * Guarda el stripe_payment_id en una orden pagada (para reembolsos futuros).
+ * @param {number} id_vent
+ * @param {string} paymentIntent
+ */
+const updatePaymentInfo = (id_vent, paymentIntent) =>
+    db.query(
+        'UPDATE Ventas SET stripe_payment_id = $1, metodopago_usu = $2 WHERE id_vent = $3',
+        [paymentIntent, 'stripe_tarjeta', id_vent]
+    );
+
 const remove = (id_vent) =>
     db.query('DELETE FROM Ventas WHERE id_vent = $1 RETURNING id_vent', [id_vent]);
 
@@ -140,5 +151,6 @@ module.exports = {
     createWithItems,
     insertOutboxEvent,
     updateStatus,
+    updatePaymentInfo,
     remove,
 };

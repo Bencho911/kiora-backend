@@ -1,8 +1,8 @@
 'use strict';
 
 const stripeService = require('../services/stripeService');
-const { findByIdWithItems } = require('../repositories/orderRepository');
-const db = require('../config/db');
+const orderService = require('../services/orderService');
+const orderRepository = require('../repositories/orderRepository');
 const logger = require('../config/logger');
 const { outgoingHeaders, fetchWithRetry, DEFAULT_TIMEOUT_MS } = require('../utils/httpClient');
 
@@ -11,7 +11,7 @@ const generateCheckoutParams = async (req, res) => {
     const { success_url, cancel_url } = req.body || {};
 
     try {
-        const orden = await findByIdWithItems(id);
+        const orden = await orderRepository.findByIdWithItems(id);
         if (!orden) {
             return res.status(404).json({ error: 'Orden no encontrada.' });
         }
@@ -74,34 +74,29 @@ const handleStripeWebhook = async (req, res) => {
 
         logger.info('Stripe Webhook: Orden #' + orderId + ' Pagada con Éxito', { paymentIntent });
 
-        // ── Transacción atómica: estado + stripe_payment_id + outbox event ──
-        // La llamada a inventory-service se delega al Outbox Poller para evitar
-        // inconsistencias (HTTP síncrono dentro de una transacción BD).
-        const client = await db.connect();
+        // ── Completar la orden con toda la lógica transaccional ──
+        // Se usa completeOrder() que en una sola transacción atómica:
+        //   a) Cambia estado a 'completada'
+        //   b) Crea la factura
+        //   c) Inserta eventos outbox de movimiento de inventario (salida) por cada ítem
+        //   d) Inserta evento outbox para facturación electrónica (Factus/DIAN)
+        //   e) Envía broadcast WebSocket al dashboard (fuera de la transacción)
+        // Esto reemplaza el flujo anterior que solo marcaba 'pagado' + inventory.reserve.commit,
+        // resolviendo: la orden se completa automáticamente al recibir el pago.
+        const result = await orderService.completeOrder(orderId, req.headers);
+
+        if (!result.ok) {
+            logger.error('Error completando orden desde webhook Stripe', {
+                orderId, error: result.error, code: result.code,
+            });
+            return res.status(result.status || 500).json({ error: result.error || 'Error completando la orden.' });
+        }
+
+        // ── Guardar el stripe_payment_id para futuros reembolsos ──
         try {
-            await client.query('BEGIN');
-
-            // 1. Actualizar estado y guardar stripe_payment_id para futuros reembolsos
-            await client.query(
-                'UPDATE Ventas SET estado = $1, metodopago_usu = $2, stripe_payment_id = $3 WHERE id_vent = $4',
-                ['pagado', 'stripe_tarjeta', paymentIntent, orderId]
-            );
-
-            // 2. Insertar evento outbox: el poller confirmará la reserva contra inventory-service
-            await client.query(
-                `INSERT INTO outbox_events (event_type, payload) VALUES ($1, $2)`,
-                ['inventory.reserve.commit', JSON.stringify({ orderId })]
-            );
-            logger.info('Evento outbox inventory.reserve.commit encolado', { orderId });
-
-            await client.query('COMMIT');
-            logger.info('Transacción webhook completada', { orderId });
-        } catch (dbError) {
-            await client.query('ROLLBACK');
-            logger.error('Error en transacción Webhook Stripe:', { dbError: dbError.message, orderId });
-            return res.status(500).json({ error: 'Error interno al procesar el pago.' });
-        } finally {
-            client.release();
+            await orderRepository.updatePaymentInfo(orderId, paymentIntent);
+        } catch (err) {
+            logger.warn('No se pudo guardar stripe_payment_id (no crítico)', { orderId, error: err.message });
         }
     }
 
