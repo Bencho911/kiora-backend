@@ -33,7 +33,7 @@ const createCheckoutSession = async (order, items, successUrl = null, cancelUrl 
                     product_data: {
                         name: item.nom_prod || ('Producto #' + item.cod_prod),
                     },
-                    unit_amount: Math.round(item.precio_unit * 100), // Stripe usa centavos
+                    unit_amount: Math.round(Number(item.precio_unit)), // Stripe usa centavos
                 },
                 quantity: item.cantidad,
             })),
