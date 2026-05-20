@@ -74,29 +74,29 @@ const handleStripeWebhook = async (req, res) => {
 
         logger.info('Stripe Webhook: Orden #' + orderId + ' Pagada con Éxito', { paymentIntent });
 
-        // ── Completar la orden con toda la lógica transaccional ──
-        // Se usa completeOrder() que en una sola transacción atómica:
-        //   a) Cambia estado a 'completada'
-        //   b) Crea la factura
-        //   c) Inserta eventos outbox de movimiento de inventario (salida) por cada ítem
-        //   d) Inserta evento outbox para facturación electrónica (Factus/DIAN)
-        //   e) Envía broadcast WebSocket al dashboard (fuera de la transacción)
-        // Esto reemplaza el flujo anterior que solo marcaba 'pagado' + inventory.reserve.commit,
-        // resolviendo: la orden se completa automáticamente al recibir el pago.
-        const result = await orderService.completeOrder(orderId, req.headers);
-
-        if (!result.ok) {
-            logger.error('Error completando orden desde webhook Stripe', {
-                orderId, error: result.error, code: result.code,
-            });
-            return res.status(result.status || 500).json({ error: result.error || 'Error completando la orden.' });
-        }
-
-        // ── Guardar el stripe_payment_id para futuros reembolsos ──
         try {
-            await orderRepository.updatePaymentInfo(orderId, paymentIntent);
+            // ── Completar la orden con toda la lógica transaccional ──
+            // Se usa completeOrder() que en una sola transacción atómica:
+            //   a) Cambia estado a 'completada' (+ stripe_payment_id)
+            //   b) Crea la factura
+            //   c) Inserta eventos outbox de movimiento de inventario (salida) por cada ítem
+            //   d) Inserta evento outbox para facturación electrónica (Factus/DIAN)
+            //   e) Envía broadcast WebSocket al dashboard (fuera de la transacción)
+            // stripePaymentId se pasa para guardarlo dentro de la misma transacción,
+            // evitando que quede una orden completada sin ID de pago para reembolsos.
+            const result = await orderService.completeOrder(orderId, req.headers, paymentIntent);
+
+            if (!result.ok) {
+                logger.error('Error completando orden desde webhook Stripe', {
+                    orderId, error: result.error, code: result.code,
+                });
+                return res.status(result.status || 500).json({ error: result.error || 'Error completando la orden.' });
+            }
         } catch (err) {
-            logger.warn('No se pudo guardar stripe_payment_id (no crítico)', { orderId, error: err.message });
+            logger.error('Error CRÍTICO en webhook Stripe — excepción no capturada en completeOrder', {
+                orderId, error: err.message, stack: err.stack,
+            });
+            return res.status(500).json({ error: 'Error interno procesando el webhook.' });
         }
     }
 

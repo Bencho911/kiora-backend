@@ -39,7 +39,7 @@ async function createOrder(data) {
  * Flujo:
  * 1. Validar estado de la orden (idempotencia, transición válida)
  * 2. BEGIN transacción
- *    a. UPDATE Ventas → 'completada'
+ *    a. UPDATE Ventas → 'completada' (+ stripe_payment_id si aplica)
  *    b. INSERT Factura
  *    c. INSERT outbox_events (inventory.movement) × N ítems
  * 3. COMMIT
@@ -51,8 +51,9 @@ async function createOrder(data) {
  *
  * @param {number} orderId
  * @param {object} reqHeaders — Headers del request original (para correlation-id)
+ * @param {string} [stripePaymentId] — PaymentIntent de Stripe (opcional, desde webhook)
  */
-async function completeOrder(orderId, reqHeaders) {
+async function completeOrder(orderId, reqHeaders, stripePaymentId) {
     const order = await orderRepository.findByIdWithItems(orderId);
     if (!order) return { error: 'Venta no encontrada.', status: 404 };
 
@@ -82,9 +83,18 @@ async function completeOrder(orderId, reqHeaders) {
     try {
         await client.query('BEGIN');
 
-        // 1. Marcar venta como completada
+        // 1. Marcar venta como completada (incluye stripe_payment_id si viene del webhook)
         const result = await orderRepository.updateStatus(orderId, 'completada', client);
         updatedOrder = result.rows[0];
+
+        // 1b. Guardar stripe_payment_id dentro de la misma transacción para evitar
+        //     datos huérfanos (orden completada sin ID de pago → imposible reembolsar)
+        if (stripePaymentId) {
+            await client.query(
+                'UPDATE Ventas SET stripe_payment_id = $1, metodopago_usu = $2 WHERE id_vent = $3',
+                [stripePaymentId, 'stripe_tarjeta', orderId]
+            );
+        }
 
         // 2. Generar factura
         const totalQty = order.items.reduce((sum, i) => sum + i.cantidad, 0);
@@ -134,7 +144,7 @@ async function completeOrder(orderId, reqHeaders) {
         logger.error('Error en transacción Outbox de completeOrder', {
             orderId, error: err.message,
         });
-        throw err;
+        return { ok: false, error: `Error en transacción: ${err.message}`, code: 'TRANSACTION_ERROR', status: 500 };
     } finally {
         client.release();
     }

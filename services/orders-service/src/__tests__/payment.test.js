@@ -87,7 +87,6 @@ describe('Stripe Webhook (handleStripeWebhook)', () => {
         };
 
         jest.spyOn(stripeService, 'verifyWebhookSignature').mockReturnValue(fakeEvent);
-        orderRepository.updatePaymentInfo = jest.fn().mockResolvedValue({ rows: [] });
 
         const res = await request(app)
             .post('/api/orders/checkout/webhook')
@@ -131,8 +130,12 @@ describe('Stripe Webhook (handleStripeWebhook)', () => {
         expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
         expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
 
-        // Verificar que se guardó el stripe_payment_id
-        expect(orderRepository.updatePaymentInfo).toHaveBeenCalledWith('42', 'pi_test_456');
+        // Verificar que el stripe_payment_id se guardó DENTRO de la transacción
+        // (UPDATE directo en la transacción de completeOrder, no llamada separada)
+        expect(mockClient.query).toHaveBeenCalledWith(
+            'UPDATE Ventas SET stripe_payment_id = $1, metodopago_usu = $2 WHERE id_vent = $3',
+            ['pi_test_456', 'stripe_tarjeta', '42']
+        );
     });
 
     test('ROLLBACK si ocurre error en completeOrder', async () => {
