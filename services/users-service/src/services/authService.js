@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const blacklist = require('../config/blacklist');
 
-const ACCESS_TOKEN_EXPIRY = '10m';
+const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
 
 // ── Fail-fast: access y refresh DEBEN usar secretos distintos ─────────────

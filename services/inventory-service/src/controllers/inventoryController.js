@@ -3,6 +3,7 @@
 const inventoryRepository = require('../repositories/inventoryRepository');
 const inventoryService = require('../services/inventoryService');
 const directEmailService = require('../services/directEmailService');
+const logActivity = require('../utils/logActivity');
 const redisService = require('../services/redisService');
 const parsePagination = require('../utils/parsePagination');
 const logger = require('../config/logger');
@@ -133,6 +134,8 @@ const createMovement = async (req, res, next) => {
             tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento
         }, req.headers);
         res.status(201).json(movement);
+
+        logActivity({ user_email: req.user?.correo_usu, action: 'created', entity_type: 'movement', entity_id: movement.id_mov, details: `${tipo_mov} de ${cantidad} uds — prod #${cod_prod}` });
     } catch (error) {
         // Idempotencia: si fk_id_vent ya existe para ese cod_prod (unique index)
         if (error.code === '23505' && error.constraint === 'uq_inventario_venta_producto') {

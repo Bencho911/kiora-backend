@@ -3,6 +3,7 @@
 const productRepository = require('../repositories/productRepository');
 const cacheService = require('../services/cacheService');
 const parsePagination = require('../utils/parsePagination');
+const logActivity = require('../utils/logActivity');
 const logger = require('../config/logger');
 
 /**
@@ -98,6 +99,8 @@ const createProduct = async (req, res, next) => {
         await cacheService.invalidate('products');
 
         res.status(201).json(result.rows[0]);
+
+        logActivity({ user_email: req.user?.correo_usu, action: 'created', entity_type: 'product', entity_id: result.rows[0]?.cod_prod, details: `Producto "${result.rows[0]?.nom_prod}" creado` });
     } catch (error) {
         if (error.code === '23503') {
             return res.status(400).json({ error: `Una de las categorías proporcionadas no existe.`, code: 'FK_NOT_FOUND' });
@@ -145,6 +148,8 @@ const updateProduct = async (req, res, next) => {
         await cacheService.invalidate('products');
 
         res.status(200).json(result.rows[0]);
+
+        logActivity({ user_email: req.user?.correo_usu, action: 'updated', entity_type: 'product', entity_id: id, details: `Producto "${result.rows[0]?.nom_prod}" actualizado` });
     } catch (error) {
         if (error.code === '23503') {
             return res.status(400).json({ error: `Una de las categorías proporcionadas no existe.`, code: 'FK_NOT_FOUND' });
@@ -168,6 +173,8 @@ const deleteProduct = async (req, res, next) => {
         await cacheService.invalidate('products');
 
         res.status(200).json({ message: 'Producto eliminado exitosamente.' });
+
+        logActivity({ user_email: req.user?.correo_usu, action: 'deleted', entity_type: 'product', entity_id: id, details: `Producto "${result.rows[0]?.nom_prod}" eliminado` });
     } catch (error) {
         logger.error('Error al eliminar producto', { error: error.message });
         next(error);

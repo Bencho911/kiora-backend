@@ -169,6 +169,7 @@ services:
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       REDIS_HOST: kiora-redis
+      ACTIVITY_SERVICE_URL: http://activity-service:3007
     depends_on:
       - users-service
       - products-service
@@ -403,6 +404,45 @@ services:
       kiora-redis:
         condition: service_healthy
 
+  activity-db:
+    image: postgres:16-alpine
+    container_name: kiora_activity_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      POSTGRES_DB: kiora_activity
+    ports:
+      - "5440:5432"
+    networks:
+      - kiora-backend-net
+    volumes:
+      - activity_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_activity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  activity-service:
+    build:
+      context: ./services/activity-service
+      dockerfile: Dockerfile
+    container_name: kiora_activity_service
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    networks:
+      - kiora-backend-net
+    env_file:
+      - ./services/activity-service/.env.docker
+    environment:
+      DB_HOST: activity-db
+      DB_PORT: 5432
+    depends_on:
+      activity-db:
+        condition: service_healthy
+
 networks:
   kiora-public-net:
     name: kiora-public-net
@@ -418,6 +458,7 @@ volumes:
   inventory_db_data:
   orders_db_data:
   notifications_db_data:
+  activity_db_data:
   redis_data:
   pgadmin_data:
   prometheus_data:

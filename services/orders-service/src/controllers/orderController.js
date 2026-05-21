@@ -3,6 +3,7 @@
 const orderRepository = require('../repositories/orderRepository');
 const orderService = require('../services/orderService');
 const parsePagination = require('../utils/parsePagination');
+const logActivity = require('../utils/logActivity');
 const logger = require('../config/logger');
 
 /**
@@ -53,6 +54,8 @@ const createOrder = async (req, res, next) => {
     try {
         const order = await orderService.createOrder({ metodopago_usu, items });
         res.status(201).json(order);
+
+        logActivity({ user_email: req.user?.correo_usu, action: 'created', entity_type: 'order', entity_id: order.id_vent, details: `Venta #${order.id_vent} creada por $${order.montofinal_vent || 0}` });
     } catch (error) {
         logger.error('Error al crear venta', { error: error.message });
         next(error);
@@ -76,6 +79,8 @@ const updateOrderStatus = async (req, res, next) => {
         }
 
         res.status(200).json(result.data);
+
+        logActivity({ user_email: req.user?.correo_usu, action: estado === 'cancelada' ? 'deleted' : 'updated', entity_type: 'order', entity_id: orderId, details: `Venta #${orderId} → estado: ${estado}` });
     } catch (error) {
         logger.error('Error al actualizar estado', { error: error.message });
         next(error);

@@ -122,6 +122,7 @@ const services = {
     orders: process.env.ORDERS_SERVICE_URL || 'http://localhost:3004',
     notifications: process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:3005',
     reports: process.env.REPORTS_SERVICE_URL || 'http://localhost:3006',
+    activity: process.env.ACTIVITY_SERVICE_URL || 'http://localhost:3007',
 };
 
 // ── Proxy factory ─────────────────────────────────────────────────────────
@@ -233,6 +234,7 @@ app.use('/api/v1/orders', v1Proxy('orders-service', services.orders, '/orders'))
 app.use('/api/v1/invoices', v1Proxy('orders-service', services.orders, '/invoices'));
 app.use('/api/v1/notifications', v1Proxy('notifications-service', services.notifications, '/notifications'));
 app.use('/api/v1/reports', v1Proxy('reports-service', services.reports, '/reports'));
+app.use('/api/v1/activity-logs', v1Proxy('activity-service', services.activity, '/activity-logs'));
 app.use('/api/v1/incidents', v1Proxy('users-service', services.users, '/incidents'));
 
 // ── Legacy routes (/api/*) — backwards compatible, with deprecation header ─
@@ -245,6 +247,7 @@ app.use('/api/orders', transparentProxy('orders-service', services.orders));
 app.use('/api/invoices', transparentProxy('orders-service', services.orders));
 app.use('/api/notifications', transparentProxy('notifications-service', services.notifications));
 app.use('/api/reports', transparentProxy('reports-service', services.reports));
+app.use('/api/activity-logs', transparentProxy('activity-service', services.activity));
 app.use('/api/incidents', transparentProxy('users-service', services.users));
 
 // ── Imágenes subidas (proxy a products-service) ──────────────────────────
@@ -300,6 +303,7 @@ const serviceHealthPaths = {
     orders: `${services.orders}/health`,
     notifications: `${services.notifications}/health`,
     reports: `${services.reports}/api/reports/health`,
+    activity: `${services.activity}/health`,
 };
 
 app.get('/health/all', async (_req, res) => {
