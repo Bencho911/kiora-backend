@@ -64,7 +64,7 @@ const getProductById = async (req, res, next) => {
 
 // POST /api/products  (HU10)
 const createProduct = async (req, res, next) => {
-    const { nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo } = req.body;
+    const { nom_prod, descrip_prod, precio_unitario, descuento, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, codigo_barras } = req.body;
     const url_imagen = req.file
         ? (req.file.path?.startsWith('http')
             ? req.file.path
@@ -87,11 +87,13 @@ const createProduct = async (req, res, next) => {
             nom_prod,
             descrip_prod: descrip_prod || null,
             precio_unitario: Number(precio_unitario),
+            descuento: descuento !== undefined ? Number(descuento) : 0,
             fechaven_prod: fechaven_prod || null,
             fk_cod_cats: parsedCats,
             stock_actual: Number(stock_actual || 0),
             stock_minimo: Number(stock_minimo || 0),
-            url_imagen
+            url_imagen,
+            codigo_barras: codigo_barras || null
         });
         logger.info('Producto creado', { cod_prod: result.rows[0].cod_prod });
 

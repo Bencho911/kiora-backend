@@ -26,7 +26,7 @@ const { outgoingHeaders, fetchWithRetry, NOTIFY_TIMEOUT_MS } = require('../utils
  */
 async function createOrder(data) {
     const KIOSKO_USER_ID = Number(process.env.KIOSKO_USER_ID || 1);
-    const order = await orderRepository.createWithItems({ ...data, id_usu: KIOSKO_USER_ID });
+    const order = await orderRepository.createWithItems({ ...data, id_usu: KIOSKO_USER_ID, descuento_global: data.descuento_global });
     logger.info('Venta creada', { id_vent: order.id_vent });
     return order;
 }

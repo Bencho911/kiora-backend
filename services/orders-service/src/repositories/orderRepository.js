@@ -45,15 +45,18 @@ const findByIdWithItems = async (id_vent) => {
  * Crea una venta con sus líneas en una sola transacción.
  * @param {{ metodopago_usu, items: Array<{cod_prod, cantidad, precio_unit}> }} data
  */
-const createWithItems = async ({ metodopago_usu, items }) => {
+const createWithItems = async ({ metodopago_usu, items, descuento_global }) => {
     const client = await db.connect();
     try {
         await client.query('BEGIN');
 
-        const montofinal = items.reduce(
+        let montofinal = items.reduce(
             (sum, i) => sum + Number(i.precio_unit) * Number(i.cantidad),
             0
         );
+        if (descuento_global && descuento_global > 0) {
+            montofinal = montofinal * (1 - Math.min(descuento_global, 100) / 100);
+        }
         const precio_prod_final = items.length > 0 ? Number(items[0].precio_unit) : 0;
 
         const ventaRes = await client.query(

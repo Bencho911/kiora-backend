@@ -24,26 +24,48 @@ const generateCheckoutParams = async (req, res) => {
         // Se mantiene síncrona intencionalmente: es mejor decirle al cliente
         // "no hay stock" ANTES de cobrarle, que cobrar y reembolsar después.
         const headers = outgoingHeaders(req.headers);
-        const reserveRes = await fetchWithRetry(
-            process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve',
-            {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ orderId: orden.id_vent, items: orden.items }),
-            },
-            {
-                maxRetries: 1,
-                timeoutMs: DEFAULT_TIMEOUT_MS,
-                onNonRetryable: (status) => status >= 400 && status < 500,
-            }
-        );
+        let reserveRes;
+        try {
+            reserveRes = await fetchWithRetry(
+                process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve',
+                {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ orderId: orden.id_vent, items: orden.items }),
+                },
+                {
+                    maxRetries: 1,
+                    timeoutMs: DEFAULT_TIMEOUT_MS,
+                    onNonRetryable: (status) => status >= 400 && status < 500,
+                }
+            );
+        } catch (inventoryErr) {
+            logger.error('Error de conectividad con inventory-service al reservar', {
+                orderId: id, error: inventoryErr.message, code: inventoryErr.code,
+            });
+            return res.status(503).json({
+                error: 'No se pudo validar el inventario. Intenta de nuevo en unos segundos.',
+                detail: inventoryErr.message,
+            });
+        }
 
         if (!reserveRes.ok) {
             const errData = await reserveRes.json().catch(() => ({}));
             return res.status(409).json({ error: errData.error || 'Agotado o fallo reservando inventario temporalmente' });
         }
 
-        const url = await stripeService.createCheckoutSession(orden, orden.items, success_url, cancel_url);
+        let url;
+        try {
+            url = await stripeService.createCheckoutSession(orden, orden.items, success_url, cancel_url);
+        } catch (stripeErr) {
+            logger.error('Error creando sesión Stripe Checkout', {
+                orderId: id, error: stripeErr.message, type: stripeErr.type,
+            });
+            return res.status(502).json({
+                error: 'Error al generar el enlace de pago con Stripe.',
+                detail: stripeErr.message,
+            });
+        }
 
         res.status(200).json({
             status: 'ok',
@@ -52,7 +74,7 @@ const generateCheckoutParams = async (req, res) => {
 
     } catch (error) {
         logger.error('Error generando link de pago Checkout', { error: error.message, stack: error.stack });
-        res.status(500).json({ error: 'Error interno generando link de pago.' });
+        res.status(500).json({ error: 'Error interno generando link de pago.', detail: error.message });
     }
 };
 

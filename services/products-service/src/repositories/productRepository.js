@@ -16,7 +16,7 @@ const findAll = ({ limit = 20, offset = 0 } = {}) =>
     db.query(
         `SELECT p.cod_prod, p.nom_prod, p.descrip_prod, p.precio_unitario,
                 p.fechaven_prod, p.fk_cod_cats,
-                p.stock_actual, p.stock_minimo, p.url_imagen
+                p.stock_actual, p.stock_minimo, p.url_imagen, p.descuento, p.codigo_barras
          FROM Producto p
          WHERE p.activo = true
          ORDER BY p.cod_prod
@@ -35,7 +35,7 @@ const findById = (cod_prod) =>
     db.query(
         `SELECT p.cod_prod, p.nom_prod, p.descrip_prod, p.precio_unitario,
                 p.fechaven_prod, p.fk_cod_cats,
-                p.stock_actual, p.stock_minimo, p.url_imagen
+                p.stock_actual, p.stock_minimo, p.url_imagen, p.descuento, p.codigo_barras
          FROM Producto p
          WHERE p.cod_prod = $1`,
         [cod_prod]
@@ -43,14 +43,14 @@ const findById = (cod_prod) =>
 
 /**
  * Inserta un nuevo producto.
- * @param {{ nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen }} fields
+ * @param {{ nom_prod, descrip_prod, precio_unitario, descuento, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen, codigo_barras }} fields
  */
-const create = ({ nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen }) =>
+const create = ({ nom_prod, descrip_prod, precio_unitario, descuento, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen, codigo_barras }) =>
     db.query(
-        `INSERT INTO Producto (nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO Producto (nom_prod, descrip_prod, precio_unitario, descuento, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen, codigo_barras)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [nom_prod, descrip_prod || null, precio_unitario, fechaven_prod || null, fk_cod_cats || [], stock_actual ?? 0, stock_minimo ?? 0, url_imagen || null]
+        [nom_prod, descrip_prod || null, precio_unitario, descuento ?? 0, fechaven_prod || null, fk_cod_cats || [], stock_actual ?? 0, stock_minimo ?? 0, url_imagen || null, codigo_barras || null]
     );
 
 /**
@@ -59,7 +59,7 @@ const create = ({ nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod
  * @param {object} fields
  */
 const update = (cod_prod, fields) => {
-    const allowed = ['nom_prod', 'descrip_prod', 'precio_unitario', 'fechaven_prod', 'fk_cod_cats', 'stock_actual', 'stock_minimo', 'url_imagen'];
+    const allowed = ['nom_prod', 'descrip_prod', 'precio_unitario', 'descuento', 'fechaven_prod', 'fk_cod_cats', 'stock_actual', 'stock_minimo', 'url_imagen', 'codigo_barras'];
     const entries = Object.entries(fields).filter(([key]) => allowed.includes(key));
     if (entries.length === 0) return Promise.resolve({ rows: [] });
     const setClauses = entries.map(([key], i) => `${key} = $${i + 1}`).join(', ');
