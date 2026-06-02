@@ -123,6 +123,7 @@ const services = {
     notifications: process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:3005',
     reports: process.env.REPORTS_SERVICE_URL || 'http://localhost:3006',
     activity: process.env.ACTIVITY_SERVICE_URL || 'http://localhost:3007',
+    ai: process.env.AI_SERVICE_URL || 'http://localhost:3008',
 };
 
 // ── Proxy factory ─────────────────────────────────────────────────────────
@@ -181,6 +182,7 @@ const swaggerOptions = {
             { url: '/api/docs.json?svc=orders', name: 'Orders Service' },
             { url: '/api/docs.json?svc=reports', name: 'Reports Service' },
             { url: '/api/docs.json?svc=notifications', name: 'Notifications Service' },
+            { url: '/api/docs.json?svc=ai', name: 'AI Service' },
         ],
     },
 };
@@ -236,6 +238,7 @@ app.use('/api/v1/notifications', v1Proxy('notifications-service', services.notif
 app.use('/api/v1/reports', v1Proxy('reports-service', services.reports, '/reports'));
 app.use('/api/v1/activity-logs', v1Proxy('activity-service', services.activity, '/activity-logs'));
 app.use('/api/v1/incidents', v1Proxy('users-service', services.users, '/incidents'));
+app.use('/api/v1/ai', v1Proxy('ai-service', services.ai, '/ai'));
 
 // ── Legacy routes (/api/*) — backwards compatible, with deprecation header ─
 app.use('/api/users', transparentProxy('users-service', services.users));
@@ -249,6 +252,9 @@ app.use('/api/notifications', transparentProxy('notifications-service', services
 app.use('/api/reports', transparentProxy('reports-service', services.reports));
 app.use('/api/activity-logs', transparentProxy('activity-service', services.activity));
 app.use('/api/incidents', transparentProxy('users-service', services.users));
+
+// AI routes
+app.use('/api/ai', transparentProxy('ai-service', services.ai));
 
 // ── Imágenes subidas (proxy a products-service) ──────────────────────────
 app.use('/uploads', transparentProxy('products-service', services.products));
@@ -304,6 +310,7 @@ const serviceHealthPaths = {
     notifications: `${services.notifications}/health`,
     reports: `${services.reports}/api/reports/health`,
     activity: `${services.activity}/health`,
+    ai: `${services.ai}/health`,
 };
 
 app.get('/health/all', async (_req, res) => {

@@ -52,6 +52,12 @@ const createOrder = async (req, res, next) => {
     const { metodopago_usu, items } = req.body;
 
     try {
+        const redisClient = require('../config/redis');
+        const state = await redisClient.get('kiora:business_state');
+        if (state === 'closed') {
+            return res.status(403).json({ error: 'La caja está cerrada. Abre el negocio para permitir ventas.', code: 'BUSINESS_CLOSED' });
+        }
+
         const order = await orderService.createOrder({ metodopago_usu, items });
         res.status(201).json(order);
 
@@ -106,14 +112,31 @@ const deleteOrder = async (req, res, next) => {
 const getStats = async (req, res, next) => {
     try {
         const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
-        const result = await orderRepository.getStats(fecha);
-        const row = result.rows[0] || { total_ventas: 0, monto_total: 0, ticket_promedio: 0, ultima_venta: null };
+        const data = await orderRepository.getStats(fecha);
+        
+        const calcTrend = (hoy, ayer) => {
+            if (ayer === 0 && hoy > 0) return 100;
+            if (ayer === 0 && hoy === 0) return 0;
+            return ((hoy - ayer) / ayer) * 100;
+        };
+
+        const trendMonto = calcTrend(Number(data.hoy.monto_total), Number(data.ayer.monto_total));
+        const trendTicket = calcTrend(Number(data.hoy.ticket_promedio), Number(data.ayer.ticket_promedio));
+
         res.status(200).json({
             fecha,
-            ventas_hoy: Number(row.total_ventas),
-            monto_total: Number(row.monto_total).toFixed(2),
-            ticket_promedio: Number(row.ticket_promedio).toFixed(2),
-            ultima_venta: row.ultima_venta || null,
+            ventas_hoy: Number(data.hoy.total_ventas),
+            monto_total: Number(data.hoy.monto_total).toFixed(2),
+            ticket_promedio: Number(data.hoy.ticket_promedio).toFixed(2),
+            ultima_venta: data.hoy.ultima_venta || null,
+            ventas_ayer: Number(data.ayer.total_ventas),
+            monto_total_ayer: Number(data.ayer.monto_total).toFixed(2),
+            ticket_promedio_ayer: Number(data.ayer.ticket_promedio).toFixed(2),
+            trend_monto: trendMonto,
+            trend_ticket: trendTicket,
+            pagos_efectivo: data.pagos.pagos_efectivo,
+            pagos_tarjeta: data.pagos.pagos_tarjeta,
+            evolucion_ventas: data.evolucion
         });
     } catch (error) {
         logger.error('Error al obtener stats', { error: error.message });

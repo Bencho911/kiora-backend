@@ -14,8 +14,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_users
-    ports:
-      - "5433:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -34,8 +32,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_products
-    ports:
-      - "5434:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -54,8 +50,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_inventory
-    ports:
-      - "5435:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -74,8 +68,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_notifications
-    ports:
-      - "5437:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -94,8 +86,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_orders
-    ports:
-      - "5436:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -115,8 +105,6 @@ services:
     image: redis:7-alpine
     container_name: kiora_redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     networks:
       - kiora-backend-net
     volumes:
@@ -170,6 +158,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       REDIS_HOST: kiora-redis
       ACTIVITY_SERVICE_URL: http://activity-service:3007
+      AI_SERVICE_URL: http://ai-service:3008
     depends_on:
       - users-service
       - products-service
@@ -177,6 +166,8 @@ services:
       - orders-service
       - notifications-service
       - reports-service
+      - activity-service
+      - ai-service
 
   users-service:
     build:
@@ -184,8 +175,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_users_service
     restart: unless-stopped
-    ports:
-      - "3001:3001"
     networks:
       - kiora-backend-net
     env_file:
@@ -213,8 +202,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_products_service
     restart: unless-stopped
-    ports:
-      - "3002:3002"
     networks:
       - kiora-backend-net
     env_file:
@@ -241,8 +228,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_inventory_service
     restart: unless-stopped
-    ports:
-      - "3003:3003"
     networks:
       - kiora-backend-net
     env_file:
@@ -271,8 +256,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_orders_service
     restart: unless-stopped
-    ports:
-      - "3004:3004"
     networks:
       - kiora-backend-net
     env_file:
@@ -297,8 +280,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_notifications_service
     restart: unless-stopped
-    ports:
-      - "3005:3005"
     networks:
       - kiora-backend-net
     env_file:
@@ -324,8 +305,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_reports_service
     restart: unless-stopped
-    ports:
-      - "3006:3006"
     networks:
       - kiora-backend-net
     env_file:
@@ -412,8 +391,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_activity
-    ports:
-      - "5440:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -424,14 +401,25 @@ services:
       timeout: 5s
       retries: 5
 
+  ai-service:
+    build:
+      context: ./services/ai-service
+      dockerfile: Dockerfile
+    container_name: kiora_ai_service
+    restart: unless-stopped
+    networks:
+      - kiora-backend-net
+    env_file:
+      - ./services/ai-service/.env.docker
+    environment:
+      API_GATEWAY_URL: http://api-gateway:3000/api
+
   activity-service:
     build:
       context: ./services/activity-service
       dockerfile: Dockerfile
     container_name: kiora_activity_service
     restart: unless-stopped
-    ports:
-      - "3007:3007"
     networks:
       - kiora-backend-net
     env_file:
@@ -445,8 +433,7 @@ services:
 
 networks:
   kiora-public-net:
-    name: kiora-public-net
-    driver: bridge
+    external: true
   kiora-backend-net:
     name: kiora-backend-net
     driver: bridge

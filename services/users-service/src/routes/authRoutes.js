@@ -189,7 +189,15 @@ router.post('/logout', verifyToken, logout);
  *         description: Redis no disponible (BLACKLIST_FAIL_OPEN=false).
  */
 router.get('/users', verifyToken, isAdmin, getUsers);
-router.get('/users/admins', getAdminEmails);
+const internalOnly = (req, res, next) => {
+    const internalSecret = req.headers['x-internal-secret'];
+    if (internalSecret === (process.env.INTERNAL_SECRET || 'kiora_internal_2024')) {
+        return next();
+    }
+    return res.status(403).json({ error: 'Forbidden internal route' });
+};
+
+router.get('/users/admins', internalOnly, getAdminEmails);
 
 /**
  * @swagger

@@ -128,8 +128,8 @@ const updatePaymentInfo = (id_vent, paymentIntent) =>
 const remove = (id_vent) =>
     db.query('DELETE FROM Ventas WHERE id_vent = $1 RETURNING id_vent', [id_vent]);
 
-const getStats = (fecha) =>
-    db.query(
+const getStats = async (fecha) => {
+    const statsHoyQuery = db.query(
         `SELECT
             COUNT(*)::int AS total_ventas,
             COALESCE(SUM(montofinal_vent), 0) AS monto_total,
@@ -144,6 +144,57 @@ const getStats = (fecha) =>
          WHERE fecha_vent::date = $1::date`,
         [fecha]
     );
+
+    const statsAyerQuery = db.query(
+        `SELECT
+            COUNT(*)::int AS total_ventas,
+            COALESCE(SUM(montofinal_vent), 0) AS monto_total,
+            CASE WHEN COUNT(*) > 0 THEN SUM(montofinal_vent) / COUNT(*) ELSE 0 END AS ticket_promedio
+         FROM Ventas
+         WHERE fecha_vent::date = ($1::date - INTERVAL '1 day')`,
+        [fecha]
+    );
+
+    const pagosHoyQuery = db.query(
+        `SELECT 
+            COUNT(*) FILTER (WHERE metodopago_usu ILIKE '%efectivo%')::int AS pagos_efectivo,
+            COUNT(*) FILTER (WHERE metodopago_usu NOT ILIKE '%efectivo%' OR metodopago_usu IS NULL)::int AS pagos_tarjeta
+         FROM Ventas
+         WHERE fecha_vent::date = $1::date`,
+        [fecha]
+    );
+
+    const evolucionQuery = db.query(
+        `SELECT 
+            EXTRACT(ISODOW FROM d) AS dow,
+            COALESCE(SUM(v.montofinal_vent), 0) AS total
+         FROM generate_series($1::date - INTERVAL '6 days', $1::date, '1 day'::interval) d
+         LEFT JOIN Ventas v ON v.fecha_vent::date = d::date
+         GROUP BY d
+         ORDER BY d`,
+        [fecha]
+    );
+
+    const [hoyRes, ayerRes, pagosRes, evolucionRes] = await Promise.all([
+        statsHoyQuery,
+        statsAyerQuery,
+        pagosHoyQuery,
+        evolucionQuery
+    ]);
+
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    const evolucion = evolucionRes.rows.map(r => ({
+        name: dayNames[r.dow] || 'X',
+        total: Number(r.total)
+    }));
+
+    return {
+        hoy: hoyRes.rows[0] || { total_ventas: 0, monto_total: 0, ticket_promedio: 0, ultima_venta: null },
+        ayer: ayerRes.rows[0] || { total_ventas: 0, monto_total: 0, ticket_promedio: 0 },
+        pagos: pagosRes.rows[0] || { pagos_efectivo: 0, pagos_tarjeta: 0 },
+        evolucion
+    };
+};
 
 module.exports = {
     findAll,

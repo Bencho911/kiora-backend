@@ -33,6 +33,9 @@ async function getAdminEmails() {
     try {
         const res = await fetch(`${baseUrl}/api/auth/users/admins`, {
             signal: AbortSignal.timeout(5000),
+            headers: {
+                'x-internal-secret': process.env.INTERNAL_SECRET || 'kiora_internal_2024'
+            }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();

@@ -40,4 +40,16 @@ const updateIncidentState = async (req, res) => {
     }
 };
 
-module.exports = { getAll, createIncident, updateIncidentState };
+const deleteIncident = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { rows } = await repo.remove(id);
+        if (rows.length === 0) return res.status(404).json({ error: 'Reporte no encontrado' });
+        res.status(200).json({ message: 'Reporte eliminado correctamente', incidente: rows[0] });
+    } catch(e) {
+        logger.error('Error eliminando incidente', e);
+        res.status(500).json({ error: 'Error eliminando el reporte' });
+    }
+};
+
+module.exports = { getAll, createIncident, updateIncidentState, deleteIncident };

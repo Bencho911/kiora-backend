@@ -14,7 +14,7 @@ const logger = {
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const API_BASE = process.env.API_GATEWAY_URL || 'http://api-gateway:3000/api';
-const API_KEY = process.env.KIORA_API_KEY || 'kiosk_secret_key_2024';
+const API_KEY = process.env.KIORA_API_KEY;
 
 if (!BOT_TOKEN) {
     logger.error('TELEGRAM_BOT_TOKEN no configurado');
@@ -37,8 +37,12 @@ function sendHtml(ctx, text) {
 
 // ── Comando /start — detecta el Chat ID ────────────────────────────────
 bot.start((ctx) => {
+    if (CHAT_ID && String(ctx.chat.id) !== String(CHAT_ID)) {
+        logger.warn('Intento de inicio no autorizado', { chatId: ctx.chat.id });
+        return;
+    }
     adminChatId = ctx.chat.id;
-    logger.info('Chat ID detectado', { chatId: adminChatId });
+    logger.info('Chat ID detectado/confirmado', { chatId: adminChatId });
     sendHtml(ctx,
         '<b>✅ Kiora Bot conectado</b>\n\n' +
         `Chat ID: <code>${adminChatId}</code>\n\n` +
@@ -64,6 +68,20 @@ async function apiGet(endpoint) {
     const res = await fetch(`${API_BASE}${endpoint}`, {
         headers: { 'x-api-key': API_KEY },
         signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}
+
+async function apiPost(endpoint, body) {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: {
+            'x-api-key': API_KEY,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
@@ -126,6 +144,29 @@ bot.command('productos', async (ctx) => {
         sendHtml(ctx, `<b>📦 Productos (${products.length}):</b>\n\n${msg}`);
     } catch {
         sendHtml(ctx, '❌ Error al consultar productos.');
+    }
+});
+
+bot.on('text', async (ctx) => {
+    // Seguridad: Ignorar mensajes que no vengan del administrador
+    if (adminChatId && String(ctx.chat.id) !== String(adminChatId)) {
+        logger.warn('Mensaje de texto ignorado (no es admin)', { chatId: ctx.chat.id });
+        return;
+    }
+
+    try {
+        await ctx.sendChatAction('typing');
+        const text = ctx.message.text;
+        
+        // Enviar al webhook de AI Service
+        await apiPost('/ai/telegram-webhook', { 
+            chatId: ctx.chat.id, 
+            text: text 
+        });
+        
+    } catch (e) {
+        logger.error('Error enviando texto a AI webhook', { error: e.message });
+        sendHtml(ctx, '❌ <i>La IA no está disponible en este momento.</i>');
     }
 });
 
