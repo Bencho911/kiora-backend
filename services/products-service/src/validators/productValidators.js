@@ -23,13 +23,17 @@ const createProductSchema = Joi.object({
         'date.format': 'fechaven_prod debe ser una fecha válida (ISO 8601).',
         'date.min': 'La fecha de vencimiento no puede ser anterior a hoy.',
     }),
-    stock_actual: Joi.number().integer().min(0).default(0).messages({
+    stock_actual: Joi.number().integer().min(0).required().messages({
+        'any.required': 'stock_actual es obligatorio.',
         'number.min': 'stock_actual no puede ser negativo.',
     }),
-    stock_minimo: Joi.number().integer().min(0).default(0).messages({
+    stock_minimo: Joi.number().integer().min(0).required().messages({
+        'any.required': 'stock_minimo es obligatorio.',
         'number.min': 'stock_minimo no puede ser negativo.',
     }),
-    fk_cod_cats: Joi.array().items(Joi.number().integer()).default([]).messages({
+    fk_cod_cats: Joi.array().items(Joi.number().integer()).min(1).required().messages({
+        'any.required': 'Debes asociar al menos una categoría.',
+        'array.min': 'Debes asociar al menos una categoría.',
         'array.base': 'fk_cod_cats debe ser un array de IDs de categorías.',
     }),
 });

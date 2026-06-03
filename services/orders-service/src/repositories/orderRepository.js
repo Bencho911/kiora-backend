@@ -196,6 +196,14 @@ const getStats = async (fecha) => {
     };
 };
 
+const checkProductInSales = async (cod_prod) => {
+    const result = await db.query(
+        'SELECT 1 FROM Producto_Venta WHERE cod_prod = $1 LIMIT 1',
+        [cod_prod]
+    );
+    return result.rows.length > 0;
+};
+
 module.exports = {
     findAll,
     countAll,
@@ -207,4 +215,5 @@ module.exports = {
     updateStatus,
     updatePaymentInfo,
     remove,
+    checkProductInSales,
 };

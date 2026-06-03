@@ -144,4 +144,16 @@ const getStats = async (req, res, next) => {
     }
 };
 
-module.exports = { getOrders, getOrderById, getStats, createOrder, updateOrderStatus, deleteOrder };
+// GET /api/orders/products/:id/has-sales
+const checkProductSales = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const exists = await orderRepository.checkProductInSales(id);
+        res.status(200).json({ hasSales: exists });
+    } catch (error) {
+        logger.error('Error al verificar ventas de producto', { error: error.message });
+        next(error);
+    }
+};
+
+module.exports = { getOrders, getOrderById, getStats, createOrder, updateOrderStatus, deleteOrder, checkProductSales };

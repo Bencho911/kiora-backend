@@ -83,6 +83,11 @@ const createProduct = async (req, res, next) => {
     }
 
     try {
+        const existing = await productRepository.findByName(nom_prod);
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ error: 'Ya existe un producto con ese nombre.', code: 'DUPLICATE_PRODUCT' });
+        }
+
         const result = await productRepository.create({
             nom_prod,
             descrip_prod: descrip_prod || null,
@@ -140,6 +145,35 @@ const updateProduct = async (req, res, next) => {
             }
         }
 
+        const existingResult = await productRepository.findById(productId);
+        if (existingResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Producto no encontrado.', code: 'NOT_FOUND' });
+        }
+        const existing = existingResult.rows[0];
+
+        let hasChanges = false;
+        for (const key of Object.keys(fields)) {
+            if (key === 'fk_cod_cats') {
+                const arr1 = [...fields[key]].sort();
+                const arr2 = [...(existing[key] || [])].sort();
+                if (JSON.stringify(arr1) !== JSON.stringify(arr2)) { hasChanges = true; break; }
+            } else if (key === 'fechaven_prod' && fields[key]) {
+                const d1 = new Date(fields[key]).toISOString().split('T')[0];
+                const d2 = existing[key] ? new Date(existing[key]).toISOString().split('T')[0] : null;
+                if (d1 !== d2) { hasChanges = true; break; }
+            } else if (Number.isNaN(Number(fields[key])) && Number.isNaN(Number(existing[key]))) {
+                if (String(fields[key]) !== String(existing[key])) { hasChanges = true; break; }
+            } else if (fields[key] !== existing[key]) {
+                if (fields[key] == existing[key]) continue; // loose equality for numbers/strings
+                hasChanges = true;
+                break;
+            }
+        }
+
+        if (!hasChanges) {
+            return res.status(200).json({ message: 'No se detectaron cambios', ...existing });
+        }
+
         const result = await productRepository.update(productId, fields);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Producto no encontrado o ningún campo válido enviado.', code: 'NOT_FOUND' });
@@ -165,6 +199,23 @@ const updateProduct = async (req, res, next) => {
 const deleteProduct = async (req, res, next) => {
     const { id } = req.params;
     try {
+        // Verificar si tiene historial de ventas consultando a orders-service
+        const ordersUrl = process.env.ORDERS_SERVICE_URL || 'http://orders-service:3004';
+        try {
+            const checkRes = await fetch(`${ordersUrl}/api/orders/products/${id}/has-sales`);
+            if (checkRes.ok) {
+                const data = await checkRes.json();
+                if (data.hasSales) {
+                    return res.status(409).json({
+                        error: 'No se puede eliminar el producto porque está vinculado a una o más ventas históricas.',
+                        code: 'HAS_SALES_HISTORY'
+                    });
+                }
+            }
+        } catch (fetchErr) {
+            logger.warn('No se pudo contactar a orders-service para verificar ventas', { error: fetchErr.message });
+        }
+
         const result = await productRepository.remove(id);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Producto no encontrado.', code: 'NOT_FOUND' });

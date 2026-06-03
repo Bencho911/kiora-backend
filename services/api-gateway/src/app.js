@@ -151,17 +151,18 @@ const transparentProxy = (serviceName, target) =>
         },
     });
 
-// ── Rutas públicas (sin JWT) — Catálogo del kiosco ────────────────────────
-app.use('/api/public/products', createProxyMiddleware({
+app.use(createProxyMiddleware({
+    pathFilter: '/api/public/products',
     target: services.products,
     changeOrigin: true,
-    pathRewrite: (path, req) => req.originalUrl.replace('/api/public/products', '/api/products'),
+    pathRewrite: { '^/api/public/products': '/api/products' },
     on: { error: onProxyError('products-service (public)') },
 }));
-app.use('/api/public/categories', createProxyMiddleware({
+app.use(createProxyMiddleware({
+    pathFilter: '/api/public/categories',
     target: services.products,
     changeOrigin: true,
-    pathRewrite: (path, req) => req.originalUrl.replace('/api/public/categories', '/api/categories'),
+    pathRewrite: { '^/api/public/categories': '/api/categories' },
     on: { error: onProxyError('products-service (public)') },
 }));
 

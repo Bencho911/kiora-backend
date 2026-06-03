@@ -42,6 +42,18 @@ const findById = (cod_prod) =>
     );
 
 /**
+ * Busca un producto por su nombre (exacto).
+ * @param {string} nom_prod
+ */
+const findByName = (nom_prod) =>
+    db.query(
+        `SELECT cod_prod, nom_prod
+         FROM Producto
+         WHERE LOWER(nom_prod) = LOWER($1) AND activo = true`,
+        [nom_prod]
+    );
+
+/**
  * Inserta un nuevo producto.
  * @param {{ nom_prod, descrip_prod, precio_unitario, descuento, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen, codigo_barras }} fields
  */
@@ -106,4 +118,4 @@ const findLowStock = () =>
          ORDER BY p.cod_prod`
     );
 
-module.exports = { findAll, countAll, findById, create, update, updateStock, remove, findLowStock };
+module.exports = { findAll, countAll, findById, findByName, create, update, updateStock, remove, findLowStock };

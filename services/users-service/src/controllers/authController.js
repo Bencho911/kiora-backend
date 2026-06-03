@@ -350,10 +350,9 @@ const forgotPassword = async (req, res, next) => {
     try {
         const result = await userRepository.findByEmail(correo_usu);
 
-        // Siempre responder 200 para no revelar si el correo existe (user enumeration)
         if (result.rows.length === 0) {
-            return res.status(200).json({
-                message: 'Si el correo está registrado, recibirás un codigo de recuperacion.'
+            return res.status(404).json({
+                error: 'El correo ingresado no se encuentra registrado en el sistema.'
             });
         }
 

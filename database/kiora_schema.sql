@@ -81,12 +81,14 @@ CREATE TABLE Producto (
     nom_prod        VARCHAR(100)   NOT NULL,
     descrip_prod    TEXT,
     precio_unitario DECIMAL(10, 2) NOT NULL CHECK (precio_unitario >= 0),
+    descuento       DECIMAL(5, 2) DEFAULT 0,
     fechaven_prod   DATE,
     -- Array de categorías (un producto puede estar en varias)
     fk_cod_cats     INTEGER[] DEFAULT '{}',
     stock_actual    INTEGER NOT NULL DEFAULT 0,
     stock_minimo    INTEGER NOT NULL DEFAULT 0,
     url_imagen      VARCHAR(500),
+    codigo_barras   VARCHAR(50) DEFAULT NULL,
     activo          BOOLEAN NOT NULL DEFAULT true,
     CONSTRAINT chk_stock_actual_no_negativo CHECK (stock_actual >= 0)
 );
