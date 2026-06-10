@@ -157,13 +157,17 @@ bot.on('text', async (ctx) => {
     try {
         await ctx.sendChatAction('typing');
         const text = ctx.message.text;
-        
+
+        logger.info('Enviando mensaje a AI webhook', { textLength: text.length });
+
         // Enviar al webhook de AI Service
-        await apiPost('/ai/telegram-webhook', { 
-            chatId: ctx.chat.id, 
-            text: text 
+        await apiPost('/ai/telegram-webhook', {
+            chatId: String(ctx.chat.id),
+            text: text
         });
-        
+
+        logger.info('AI webhook respondió OK');
+
     } catch (e) {
         logger.error('Error enviando texto a AI webhook', { error: e.message });
         sendHtml(ctx, '❌ <i>La IA no está disponible en este momento.</i>');
@@ -194,24 +198,55 @@ async function ensureConsumerGroup() {
 }
 
 async function processMessage(stream, id, message) {
-    const payloadField = message.find(([k]) => k === 'payload');
-    if (!payloadField) return;
+    // message es un array plano ['payload', '{"subject":"...", "html":"..."}']
+    const payloadIdx = message.indexOf('payload');
+    if (payloadIdx === -1 || !message[payloadIdx + 1]) {
+        await redisClient.xack(stream, REDIS_GROUP, id);
+        return;
+    }
+    const payloadRaw = message[payloadIdx + 1];
     try {
-        const payload = JSON.parse(payloadField[1]);
-        const { subject, html } = payload;
-        if (!adminChatId) return;
+        const payload = JSON.parse(payloadRaw);
+        const { subject, html, photo_base64 } = payload;
+
+        if (!adminChatId) {
+            logger.warn('adminChatId no disponible, no se puede enviar notificación');
+            await redisClient.xack(stream, REDIS_GROUP, id);
+            return;
+        }
 
         // Limpiar HTML y convertir a texto plano con formato básico
-        const cleanText = (html || subject || '')
+        const cleaned = (html || subject || '')
             .replace(/<br\s*\/?>/gi, '\n')
             .replace(/<\/?[^>]+(>|$)/g, '')
             .trim();
 
-        const text = `<b>${escapeHtml(subject || '')}</b>\n\n${escapeHtml(cleanText)}`;
-        await bot.telegram.sendMessage(adminChatId, text.slice(0, 4000), { parse_mode: 'HTML' });
+        // Escapar HTML pero convertir markdown bold a <b> después de escapar
+        const cleanText = escapeHtml(cleaned)
+            .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+            .replace(/__(.*?)__/g, '<b>$1</b>');
+
+        const text = `<b>${escapeHtml(subject || '')}</b>\n\n${cleanText}`;
+
+        logger.info('Enviando notificación por Telegram', { subject, textLength: text.length });
+
+        if (photo_base64) {
+            await bot.telegram.sendPhoto(
+                adminChatId,
+                { source: Buffer.from(photo_base64, 'base64') },
+                { caption: text.slice(0, 1024), parse_mode: 'HTML' }
+            );
+        } else {
+            await bot.telegram.sendMessage(adminChatId, text.slice(0, 4000), { parse_mode: 'HTML' });
+        }
+
+        logger.info('Notificación enviada exitosamente por Telegram');
+
         await redisClient.xack(stream, REDIS_GROUP, id);
     } catch (e) {
         logger.warn('Error procesando mensaje', { error: e.message, id });
+        // Reconocer igual para no acumular mensajes pendientes
+        try { await redisClient.xack(stream, REDIS_GROUP, id); } catch (_) {}
     }
 }
 
@@ -222,6 +257,13 @@ async function startConsumer() {
     // eslint-disable-next-line no-constant-condition
     while (true) {
         try {
+            // Verificar que la conexión Redis esté viva
+            if (redisClient.status !== 'ready') {
+                logger.warn('Redis no disponible, reconectando...');
+                await new Promise(r => setTimeout(r, 3000));
+                continue;
+            }
+
             const results = await redisClient.xreadgroup(
                 'GROUP', REDIS_GROUP, REDIS_CONSUMER,
                 'COUNT', 10,
@@ -237,6 +279,9 @@ async function startConsumer() {
         } catch (e) {
             if (e.message.includes('NOGROUP')) {
                 await ensureConsumerGroup();
+            } else if (e.message.includes('CLOSED') || e.message.includes('closed')) {
+                logger.warn('Redis cerrado, esperando reconexión...');
+                await new Promise(r => setTimeout(r, 3000));
             } else {
                 logger.error('Error en consumer loop', { error: e.message });
                 await new Promise(r => setTimeout(r, 3000));
@@ -245,12 +290,76 @@ async function startConsumer() {
     }
 }
 
+// ── Cron Jobs ────────────────────────────────────────────────────────────
+const cron = require('node-cron');
+
+function startDailyAlerts() {
+    // Ejecutar a las 8:00 AM todos los días
+    cron.schedule('0 8 * * *', async () => {
+        if (!adminChatId) return;
+        try {
+            logger.info('Ejecutando cron diario de alertas...');
+            const data = await apiGet('/inventory/alerts');
+            
+            let message = '🔔 <b>Reporte Diario de Inventario</b>\n\n';
+            let hasAlerts = false;
+            
+            if (data.lowStock && data.lowStock.length > 0) {
+                hasAlerts = true;
+                message += '📉 <b>Stock Bajo:</b>\n';
+                data.lowStock.slice(0, 10).forEach(item => {
+                    message += `- ${escapeHtml(item.nom_prod || 'Prod ' + item.cod_prod)}: ${item.stock} (Mín: ${item.stock_minimo})\n`;
+                });
+                if (data.lowStock.length > 10) message += `- ...y ${data.lowStock.length - 10} más\n`;
+                message += '\n';
+            }
+            
+            if (data.expiringBatches && data.expiringBatches.length > 0) {
+                hasAlerts = true;
+                message += '⚠️ <b>Lotes por Vencer (próximos 30 días):</b>\n';
+                data.expiringBatches.slice(0, 10).forEach(batch => {
+                    const dateStr = new Date(batch.fecha_vencimiento).toLocaleDateString();
+                    message += `- ${escapeHtml(batch.nom_prod)} [${batch.numero_lote}]: Vence ${dateStr} (Quedan: ${batch.cantidad_actual})\n`;
+                });
+                if (data.expiringBatches.length > 10) message += `- ...y ${data.expiringBatches.length - 10} más\n`;
+                message += '\n';
+            }
+            
+            if (hasAlerts) {
+                await bot.telegram.sendMessage(adminChatId, message, { parse_mode: 'HTML' });
+            } else {
+                await bot.telegram.sendMessage(adminChatId, '✅ <b>Reporte Diario:</b> Todo el inventario está en niveles óptimos y no hay lotes por vencer pronto.', { parse_mode: 'HTML' });
+            }
+        } catch (error) {
+            logger.error('Error en cron de alertas', { error: error.message });
+        }
+    });
+}
+
+// ── Handler global de errores no capturados ──────────────────────────
+process.on('unhandledRejection', (err) => {
+    logger.warn('Unhandled rejection (no crítico)', { error: err?.message || String(err) });
+});
+process.on('uncaughtException', (err) => {
+    logger.warn('Uncaught exception (no crítico)', { error: err?.message || String(err) });
+});
+
 // ── Inicio ─────────────────────────────────────────────────────────────
 async function main() {
-    bot.launch();
+    // Limpiar sesiones de polling previas (evita error 409 Conflict)
+    try {
+        await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+    } catch (e) {
+        logger.warn('Error limpiando webhook', { error: e.message });
+    }
+
+    bot.launch().catch(e => {
+        logger.warn('Error en bot.launch() (posible 409)', { error: e.message });
+    });
     logger.info('Bot de Telegram iniciado');
 
     startConsumer().catch(e => logger.error('Consumer crash', { error: e.message }));
+    startDailyAlerts();
 
     process.once('SIGINT', () => { bot.stop('SIGINT'); redisClient.quit(); });
     process.once('SIGTERM', () => { bot.stop('SIGTERM'); redisClient.quit(); });

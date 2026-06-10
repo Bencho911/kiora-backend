@@ -20,8 +20,16 @@ const {
     getSuministra,
     getSuministraById,
     upsertSuministra,
+    getAlerts,
+    getKardex,
+    getSuministraByProduct,
     getLowStock,
 } = require('../controllers/inventoryController');
+
+/* ── Alertas (Kardex/Lotes) ───────────────────────────────────────────────── */
+
+router.get('/alerts', getAlerts);
+router.get('/products/:id/kardex', getKardex);
 
 /* ── Proveedores ──────────────────────────────────────────────────────────── */
 
@@ -289,6 +297,26 @@ router.get('/suministra', getSuministra);
  *               $ref: '#/components/schemas/Error'
  */
 router.get('/suministra/:id', getSuministraById);
+
+/**
+ * @swagger
+ * /api/inventory/suministra/product/{cod_prod}:
+ *   get:
+ *     summary: Obtener suministra por código de producto
+ *     tags: [Suministra]
+ *     parameters:
+ *       - in: path
+ *         name: cod_prod
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Registro de suministra para el producto.
+ *       404:
+ *         description: No encontrado.
+ */
+router.get('/suministra/product/:cod_prod', getSuministraByProduct);
 
 /**
  * @swagger

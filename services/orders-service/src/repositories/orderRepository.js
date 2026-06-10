@@ -59,10 +59,17 @@ const createWithItems = async ({ metodopago_usu, items, descuento_global }) => {
         }
         const precio_prod_final = items.length > 0 ? Number(items[0].precio_unit) : 0;
 
+        // Buscar sesión ABIERTA
+        const sessionRes = await client.query("SELECT id FROM sesion_caja WHERE estado = 'ABIERTA'");
+        if (sessionRes.rows.length === 0) {
+            throw { status: 403, message: 'La caja está cerrada. Debes abrir una sesión para realizar ventas.', code: 'BUSINESS_CLOSED' };
+        }
+        const sesion_id = sessionRes.rows[0].id;
+
         const ventaRes = await client.query(
-            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, estado)
-             VALUES ($1, $2, $3, 'pendiente') RETURNING *`,
-            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null]
+            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, estado, sesion_id)
+             VALUES ($1, $2, $3, 'pendiente', $4) RETURNING *`,
+            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null, sesion_id]
         );
         const venta = ventaRes.rows[0];
 

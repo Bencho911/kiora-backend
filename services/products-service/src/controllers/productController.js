@@ -144,7 +144,7 @@ const updateProduct = async (req, res, next) => {
                 fields.fk_cod_cats = Array.isArray(fields.fk_cod_cats) ? fields.fk_cod_cats.map(Number) : [Number(fields.fk_cod_cats)];
             }
         }
-
+        
         const existingResult = await productRepository.findById(productId);
         if (existingResult.rows.length === 0) {
             return res.status(404).json({ error: 'Producto no encontrado.', code: 'NOT_FOUND' });
@@ -215,7 +215,6 @@ const deleteProduct = async (req, res, next) => {
         } catch (fetchErr) {
             logger.warn('No se pudo contactar a orders-service para verificar ventas', { error: fetchErr.message });
         }
-
         const result = await productRepository.remove(id);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Producto no encontrado.', code: 'NOT_FOUND' });

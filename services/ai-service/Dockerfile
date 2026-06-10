@@ -1,14 +1,21 @@
-FROM node:20-alpine AS base
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+FROM python:3.11-slim
 
-FROM node:20-alpine
 WORKDIR /app
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-COPY --from=base /app/node_modules ./node_modules
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create non-root user
+RUN addgroup --system appgroup && adduser --system --group appuser
+
+# Copy application code
 COPY . .
+
+# Set permissions
 RUN chown -R appuser:appgroup /app
 USER appuser
+
 EXPOSE 3008
-CMD ["node", "src/app.js"]
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3008"]

@@ -187,6 +187,21 @@ const getSuministraById = async (req, res, next) => {
     }
 };
 
+// GET /api/inventory/suministra/product/:cod_prod
+const getSuministraByProduct = async (req, res, next) => {
+    const { cod_prod } = req.params;
+    try {
+        const result = await inventoryRepository.findSuministraByProduct(cod_prod);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Registro de suministra no encontrado para el producto.', code: 'NOT_FOUND' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (error) {
+        logger.error('Error al obtener suministra por producto', { error: error.message });
+        next(error);
+    }
+};
+
 /**
  * POST /api/inventory/suministra  (HU14)
  * Crea o actualiza (upsert) el stock de un proveedor-producto.
@@ -231,7 +246,28 @@ const upsertSuministra = async (req, res, next) => {
     }
 };
 
-// GET /api/inventory/low-stock  (HU14)
+// GET /api/inventory/alerts  (Kardex/Lotes)
+const getAlerts = async (_req, res, next) => {
+    try {
+        const result = await inventoryRepository.getAlerts();
+        res.status(200).json(result);
+    } catch (error) {
+        logger.error('Error al consultar alertas', { error: error.message });
+        next(error);
+    }
+};
+
+// GET /api/inventory/products/:id/kardex
+const getKardex = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const result = await inventoryRepository.getKardexByProduct(id);
+        res.status(200).json(result.rows);
+    } catch (error) {
+        logger.error('Error al obtener kardex', { error: error.message });
+        next(error);
+    }
+};
 const getLowStock = async (_req, res, next) => {
     try {
         const result = await inventoryRepository.findLowStock();
@@ -252,6 +288,9 @@ module.exports = {
     createMovement,
     getSuministra,
     getSuministraById,
+    getSuministraByProduct,
     upsertSuministra,
     getLowStock,
+    getAlerts,
+    getKardex,
 };

@@ -47,22 +47,18 @@ const getOrderById = async (req, res, next) => {
     }
 };
 
-// POST /api/orders
 const createOrder = async (req, res, next) => {
     const { metodopago_usu, items } = req.body;
 
     try {
-        const redisClient = require('../config/redis');
-        const state = await redisClient.get('kiora:business_state');
-        if (state === 'closed') {
-            return res.status(403).json({ error: 'La caja está cerrada. Abre el negocio para permitir ventas.', code: 'BUSINESS_CLOSED' });
-        }
-
         const order = await orderService.createOrder({ metodopago_usu, items });
         res.status(201).json(order);
 
-        logActivity({ user_email: req.user?.correo_usu, action: 'created', entity_type: 'order', entity_id: order.id_vent, details: `Venta #${order.id_vent} creada por $${order.montofinal_vent || 0}` });
+        logActivity({ user_email: req.headers['x-user-email'] || req.user?.correo_usu, action: 'created', entity_type: 'order', entity_id: order.id_vent, details: `Venta #${order.id_vent} creada por $${order.montofinal_vent || 0}` });
     } catch (error) {
+        if (error.status === 403 && error.code === 'BUSINESS_CLOSED') {
+            return res.status(403).json({ error: error.message, code: error.code });
+        }
         logger.error('Error al crear venta', { error: error.message });
         next(error);
     }

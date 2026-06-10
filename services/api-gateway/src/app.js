@@ -253,6 +253,7 @@ app.use('/api/notifications', transparentProxy('notifications-service', services
 app.use('/api/reports', transparentProxy('reports-service', services.reports));
 app.use('/api/activity-logs', transparentProxy('activity-service', services.activity));
 app.use('/api/incidents', transparentProxy('users-service', services.users));
+app.use('/api/settings', transparentProxy('users-service', services.users));
 
 // AI routes
 app.use('/api/ai', transparentProxy('ai-service', services.ai));
