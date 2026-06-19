@@ -45,7 +45,7 @@ tags: [graphify, architecture, codebase]
 - **Observabilidad:** OpenTelemetry (Jaeger), Prometheus, Grafana
 - **Facturación:** Stripe (pagos), Factus/DIAN (facturación electrónica)
 - **Frontend:** Astro + React (TypeScript), Nginx, PWA
-- **Infra:** Docker Compose, Azure VM (Ubuntu 22.04)
+- **Infra:** Docker Compose local
 
 ## Archivos de la Bóveda
 
@@ -55,4 +55,3 @@ tags: [graphify, architecture, codebase]
 - [[PRODUCTION_READINESS]] — Estado producción
 - [[Arquitectura_Datos]] — Modelo de datos (ERD)
 - [[SECRETS_INVENTORY]] — Variables de entorno
-- [[AZURE_VM_DEPLOYMENT]] — Deploy en Azure

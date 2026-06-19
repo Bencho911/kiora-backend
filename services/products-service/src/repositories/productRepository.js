@@ -54,6 +54,18 @@ const findByName = (nom_prod) =>
     );
 
 /**
+ * Busca un producto por su código de barras.
+ * @param {string} codigo_barras
+ */
+const findByBarcode = (codigo_barras) =>
+    db.query(
+        `SELECT cod_prod, codigo_barras
+         FROM Producto
+         WHERE codigo_barras = $1 AND activo = true`,
+        [codigo_barras]
+    );
+
+/**
  * Inserta un nuevo producto.
  * @param {{ nom_prod, descrip_prod, precio_unitario, descuento, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, url_imagen, codigo_barras }} fields
  */
@@ -118,4 +130,4 @@ const findLowStock = () =>
          ORDER BY p.cod_prod`
     );
 
-module.exports = { findAll, countAll, findById, findByName, create, update, updateStock, remove, findLowStock };
+module.exports = { findAll, countAll, findById, findByName, findByBarcode, create, update, updateStock, remove, findLowStock };

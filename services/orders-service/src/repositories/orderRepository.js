@@ -135,7 +135,7 @@ const updatePaymentInfo = (id_vent, paymentIntent) =>
 const remove = (id_vent) =>
     db.query('DELETE FROM Ventas WHERE id_vent = $1 RETURNING id_vent', [id_vent]);
 
-const getStats = async (fecha) => {
+const getStats = async (fecha, period = '7d') => {
     const statsHoyQuery = db.query(
         `SELECT
             COUNT(*)::int AS total_ventas,
@@ -171,16 +171,39 @@ const getStats = async (fecha) => {
         [fecha]
     );
 
-    const evolucionQuery = db.query(
-        `SELECT 
-            EXTRACT(ISODOW FROM d) AS dow,
-            COALESCE(SUM(v.montofinal_vent), 0) AS total
-         FROM generate_series($1::date - INTERVAL '6 days', $1::date, '1 day'::interval) d
-         LEFT JOIN Ventas v ON v.fecha_vent::date = d::date
-         GROUP BY d
-         ORDER BY d`,
-        [fecha]
-    );
+    let evolucionQueryStr = '';
+    
+    if (period === 'this_month') {
+        evolucionQueryStr = `
+            SELECT 
+                EXTRACT(DAY FROM d) AS dow,
+                COALESCE(SUM(v.montofinal_vent), 0) AS total
+            FROM generate_series(date_trunc('month', $1::date), date_trunc('month', $1::date) + interval '1 month' - interval '1 day', '1 day'::interval) d
+            LEFT JOIN Ventas v ON v.fecha_vent::date = d::date
+            GROUP BY d
+            ORDER BY d`;
+    } else if (period === 'this_year') {
+        evolucionQueryStr = `
+            SELECT 
+                EXTRACT(MONTH FROM d) AS dow,
+                COALESCE(SUM(v.montofinal_vent), 0) AS total
+            FROM generate_series(date_trunc('year', $1::date), date_trunc('year', $1::date) + interval '11 months', '1 month'::interval) d
+            LEFT JOIN Ventas v ON date_trunc('month', v.fecha_vent::date) = d::date
+            GROUP BY d
+            ORDER BY d`;
+    } else {
+        // default 7d
+        evolucionQueryStr = `
+            SELECT 
+                EXTRACT(ISODOW FROM d) AS dow,
+                COALESCE(SUM(v.montofinal_vent), 0) AS total
+            FROM generate_series($1::date - INTERVAL '6 days', $1::date, '1 day'::interval) d
+            LEFT JOIN Ventas v ON v.fecha_vent::date = d::date
+            GROUP BY d
+            ORDER BY d`;
+    }
+
+    const evolucionQuery = db.query(evolucionQueryStr, [fecha]);
 
     const [hoyRes, ayerRes, pagosRes, evolucionRes] = await Promise.all([
         statsHoyQuery,
@@ -190,10 +213,22 @@ const getStats = async (fecha) => {
     ]);
 
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    const evolucion = evolucionRes.rows.map(r => ({
-        name: dayNames[r.dow] || 'X',
-        total: Number(r.total)
-    }));
+    const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    
+    const evolucion = evolucionRes.rows.map(r => {
+        let name = 'X';
+        if (period === 'this_month') {
+            name = String(r.dow);
+        } else if (period === 'this_year') {
+            name = monthNames[Number(r.dow)] || 'X';
+        } else {
+            name = dayNames[Number(r.dow)] || 'X';
+        }
+        return {
+            name,
+            total: Number(r.total)
+        };
+    });
 
     return {
         hoy: hoyRes.rows[0] || { total_ventas: 0, monto_total: 0, ticket_promedio: 0, ultima_venta: null },

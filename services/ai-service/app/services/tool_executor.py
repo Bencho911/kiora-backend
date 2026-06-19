@@ -1,6 +1,9 @@
 import os
 import httpx
+import time
 from datetime import datetime
+
+_ML_CACHE = {}
 
 GATEWAY = os.getenv("API_GATEWAY_URL", "http://localhost:3000/api")
 API_KEY = os.getenv("API_KEY", "")
@@ -196,7 +199,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "send_supplier_email",
-            "description": "Envía un correo electrónico a un proveedor solicitando inventario (simulado)",
+            "description": "Redacta un correo electrónico a un proveedor solicitando inventario y lo guarda en la carpeta Borradores de Gmail para su aprobación manual",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -260,14 +263,6 @@ TOOLS = [
                 },
                 "required": ["cod_prod", "tipo_mov", "cantidad", "desc_mov"],
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "analyze_basket_cross_selling",
-            "description": "Analiza las ventas históricas para descubrir patrones y recomendar combos (Market Basket Analysis)",
-            "parameters": {"type": "object", "properties": {}},
         },
     }
 ]
@@ -401,6 +396,13 @@ async def execute_tool(name: str, args: dict):
 
     elif name == "predict_stock_depletion":
         product_id = args.get("product_id")
+        cache_key = f"predict_stock_{product_id}"
+        now = time.time()
+        
+        # Caché de 6 horas (21600 segundos)
+        if cache_key in _ML_CACHE and (now - _ML_CACHE[cache_key]["timestamp"] < 21600):
+            return _ML_CACHE[cache_key]["data"]
+
         product = await fetch_json(f"{GATEWAY}/products/{product_id}")
         if isinstance(product, dict) and "error" in product:
             return {"error": "Producto no encontrado"}
@@ -420,11 +422,14 @@ async def execute_tool(name: str, args: dict):
             current_stock=product.get("stock_actual", 0)
         )
 
-        return {
+        result = {
             "producto": product.get("nom_prod"),
             "stock_actual": product.get("stock_actual"),
             "prediccion_ml": ml_prediction
         }
+        
+        _ML_CACHE[cache_key] = {"timestamp": now, "data": result}
+        return result
 
     elif name == "clear_system_cache":
         res = await fetch_json(f"{GATEWAY}/ai/insights/refresh", method="POST")
@@ -463,7 +468,8 @@ async def execute_tool(name: str, args: dict):
             return {"error": f"Error generando gráfico: {e}"}
 
     elif name == "send_supplier_email":
-        return {"success": True, "message": f"Correo enviado exitosamente a {args.get('supplier_email')}"}
+        from app.services.gmail_service import create_draft_email
+        return create_draft_email(args.get("supplier_email"), args.get("subject"), args.get("body"))
 
     elif name == "create_product":
         payload = {
@@ -493,17 +499,7 @@ async def execute_tool(name: str, args: dict):
             payload["fecha_vencimiento"] = args.get("fecha_vencimiento")
         return await fetch_json(f"{GATEWAY}/inventory/movements", method="POST", body=payload)
 
-    elif name == "analyze_basket_cross_selling":
-        orders = await fetch_json(f"{GATEWAY}/orders?limit=300")
-        products = await fetch_json(f"{GATEWAY}/products")
-        
-        if isinstance(orders, dict) and "error" in orders:
-            return orders
-        if isinstance(products, dict) and "error" in products:
-            return products
-            
-        from app.services.ml_service import analyze_basket_cross_selling_ml
-        return analyze_basket_cross_selling_ml(orders, products)
+
 
     else:
         return {"error": f"Tool desconocida: {name}"}

@@ -269,7 +269,11 @@ app.get('/health', (_req, res) => {
 // ── Dashboard stats (ventas en tiempo real) — delegate a orders-service ───
 app.get('/api/dashboard/stats', async (req, res) => {
     try {
-        const statsRes = await fetch(`${services.orders}/api/orders/stats`);
+        const url = new URL(`${services.orders}/api/orders/stats`);
+        if (req.query.period) url.searchParams.append('period', req.query.period);
+        if (req.query.fecha) url.searchParams.append('fecha', req.query.fecha);
+
+        const statsRes = await fetch(url.toString());
         if (!statsRes.ok) {
             logger.warn('Stats endpoint fallo, fallback a orders list', { status: statsRes.status });
             return res.status(503).json({ error: 'No se pudieron obtener estadísticas' });

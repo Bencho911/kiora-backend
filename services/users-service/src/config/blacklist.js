@@ -33,9 +33,9 @@ if (process.env.NODE_ENV === 'test') {
         port: parseInt(process.env.REDIS_PORT) || 6379,
         password: process.env.REDIS_PASSWORD || undefined,
         retryStrategy: (times) => Math.min(times * 100, 3000),
-        lazyConnect: true,
-        maxRetriesPerRequest: 0,
-        enableOfflineQueue: false,
+        lazyConnect: false,
+        maxRetriesPerRequest: 3,
+        enableOfflineQueue: true,
     });
 
     client.on('error', (err) => {

@@ -88,6 +88,13 @@ const createProduct = async (req, res, next) => {
             return res.status(409).json({ error: 'Ya existe un producto con ese nombre.', code: 'DUPLICATE_PRODUCT' });
         }
 
+        if (codigo_barras) {
+            const existingBarcode = await productRepository.findByBarcode(codigo_barras);
+            if (existingBarcode.rows.length > 0) {
+                return res.status(409).json({ error: 'El código de barras ya está registrado.', code: 'DUPLICATE_BARCODE' });
+            }
+        }
+
         const result = await productRepository.create({
             nom_prod,
             descrip_prod: descrip_prod || null,
@@ -150,6 +157,13 @@ const updateProduct = async (req, res, next) => {
             return res.status(404).json({ error: 'Producto no encontrado.', code: 'NOT_FOUND' });
         }
         const existing = existingResult.rows[0];
+
+        if (fields.codigo_barras) {
+            const existingBarcode = await productRepository.findByBarcode(fields.codigo_barras);
+            if (existingBarcode.rows.length > 0 && existingBarcode.rows[0].cod_prod !== productId) {
+                return res.status(409).json({ error: 'El código de barras ya está registrado por otro producto.', code: 'DUPLICATE_BARCODE' });
+            }
+        }
 
         let hasChanges = false;
         for (const key of Object.keys(fields)) {

@@ -57,13 +57,6 @@ const closeSession = async (req, res, next) => {
         );
         
         logger.info('Sesión de caja cerrada manualmente', { sessionId, userId, total });
-        
-        // Revisar configuración para ver si se debe abrir la siguiente automáticamente
-        const settings = await getSettings();
-        if (settings.abrir_siguiente_automatico) {
-            await pool.query("INSERT INTO sesion_caja (usuario_id, estado) VALUES ($1, 'ABIERTA')", [userId]);
-            logger.info('Nueva sesión de caja abierta automáticamente post-cierre', { byUserId: userId });
-        }
 
         res.json(result.rows[0]);
     } catch (error) {
@@ -113,15 +106,48 @@ const forceCloseSessionByCron = async () => {
                 [total, sessionId]
             );
             logger.info('Sesión de caja cerrada por CRON', { sessionId, total });
-
-            const settings = await getSettings();
-            if (settings.abrir_siguiente_automatico) {
-                await pool.query("INSERT INTO sesion_caja (usuario_id, estado) VALUES (1, 'ABIERTA')");
-                logger.info('Nueva sesión abierta por CRON (Automático post-cierre)');
-            }
         }
     } catch (error) {
         logger.error('Error en forceCloseSessionByCron', { error: error.message });
+    }
+};
+
+const getSessionReport = async (req, res, next) => {
+    try {
+        const sessionId = parseInt(req.params.id);
+        if (isNaN(sessionId)) return res.status(400).json({ error: 'ID de sesión inválido' });
+
+        // Obtener datos de la sesión
+        const sessionRes = await pool.query('SELECT * FROM sesion_caja WHERE id = $1', [sessionId]);
+        if (sessionRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Sesión no encontrada' });
+        }
+        const session = sessionRes.rows[0];
+
+        // Obtener resumen de ventas por método de pago para esta sesión
+        const salesRes = await pool.query(`
+            SELECT COALESCE(metodopago_usu, 'Efectivo') as metodo, SUM(montofinal_vent) as total, COUNT(*) as cantidad
+            FROM Ventas
+            WHERE sesion_id = $1 AND estado != 'cancelada'
+            GROUP BY COALESCE(metodopago_usu, 'Efectivo')
+        `, [sessionId]);
+
+        // Calcular total general para estar seguros
+        const totalVentas = salesRes.rows.reduce((acc, row) => acc + Number(row.total), 0);
+
+        res.json({
+            session: {
+                id: session.id,
+                hora_apertura: session.hora_apertura,
+                hora_cierre: session.hora_cierre,
+                estado: session.estado,
+                usuario_id: session.usuario_id,
+                total_ventas: totalVentas // usar el calculado que es más fresco
+            },
+            ventas_por_metodo: salesRes.rows
+        });
+    } catch (error) {
+        next(error);
     }
 };
 
@@ -130,5 +156,6 @@ module.exports = {
     closeSession,
     getCurrentSession,
     getSessionsHistory,
-    forceCloseSessionByCron
+    forceCloseSessionByCron,
+    getSessionReport
 };

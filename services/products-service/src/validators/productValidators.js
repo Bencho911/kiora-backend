@@ -16,7 +16,8 @@ const createProductSchema = Joi.object({
         'number.min': 'descuento no puede ser negativo.',
         'number.max': 'descuento no puede exceder 100.',
     }),
-    codigo_barras: Joi.string().allow('', null).max(50).optional().messages({
+    codigo_barras: Joi.string().pattern(/^[0-9]+$/).allow('', null).max(50).optional().messages({
+        'string.pattern.base': 'El código de barras solo puede contener números.',
         'string.max': 'codigo_barras no debe exceder 50 caracteres.',
     }),
     fechaven_prod: Joi.date().iso().allow(null).optional().min('now').messages({
@@ -50,7 +51,8 @@ const updateProductSchema = Joi.object({
         'number.min': 'descuento no puede ser negativo.',
         'number.max': 'descuento no puede exceder 100.',
     }),
-    codigo_barras: Joi.string().allow('', null).max(50).messages({
+    codigo_barras: Joi.string().pattern(/^[0-9]+$/).allow('', null).max(50).messages({
+        'string.pattern.base': 'El código de barras solo puede contener números.',
         'string.max': 'codigo_barras no debe exceder 50 caracteres.',
     }),
     fechaven_prod: Joi.date().iso().allow(null).min('now').messages({

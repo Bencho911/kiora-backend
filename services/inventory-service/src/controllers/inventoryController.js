@@ -58,6 +58,12 @@ const getSupplierById = async (req, res, next) => {
 const createSupplier = async (req, res, next) => {
     const { nom_prov, id_prov, tel_prov, tipoid_prov, correo_prov, dir_prov } = req.body;
     try {
+        if (id_prov) {
+            const existing = await inventoryRepository.findSupplierByIdProv(id_prov);
+            if (existing.rows.length > 0) {
+                return res.status(400).json({ error: 'El NIT/ID ya se encuentra registrado para otro proveedor.', code: 'DUPLICATE_ID' });
+            }
+        }
         const result = await inventoryRepository.createSupplier({ id_prov, nom_prov, tel_prov, tipoid_prov, correo_prov, dir_prov });
         logger.info('Proveedor creado', { cod_prov: result.rows[0].cod_prov });
         res.status(201).json(result.rows[0]);
@@ -70,7 +76,14 @@ const createSupplier = async (req, res, next) => {
 // PUT /api/inventory/suppliers/:id
 const updateSupplier = async (req, res, next) => {
     const { id } = req.params;
+    const { id_prov } = req.body;
     try {
+        if (id_prov) {
+            const existing = await inventoryRepository.findSupplierByIdProv(id_prov, id);
+            if (existing.rows.length > 0) {
+                return res.status(400).json({ error: 'El NIT/ID ya se encuentra registrado para otro proveedor.', code: 'DUPLICATE_ID' });
+            }
+        }
         const result = await inventoryRepository.updateSupplier(id, req.body);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Proveedor no encontrado o ningún campo válido enviado.', code: 'NOT_FOUND' });
@@ -261,10 +274,26 @@ const getAlerts = async (_req, res, next) => {
 const getKardex = async (req, res, next) => {
     const { id } = req.params;
     try {
-        const result = await inventoryRepository.getKardexByProduct(id);
-        res.status(200).json(result.rows);
+        const movimientos = await inventoryRepository.getKardexByProduct(id);
+        const lotes = await inventoryRepository.findLotesByProduct(id);
+        res.status(200).json({
+            movimientos: movimientos.rows,
+            lotes: lotes.rows
+        });
     } catch (error) {
         logger.error('Error al obtener kardex', { error: error.message });
+        next(error);
+    }
+};
+
+// GET /api/inventory/products/:id/lotes
+const getLotesByProduct = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const result = await inventoryRepository.findLotesByProduct(id);
+        res.status(200).json(result.rows);
+    } catch (error) {
+        logger.error('Error al obtener lotes', { error: error.message });
         next(error);
     }
 };
@@ -274,6 +303,18 @@ const getLowStock = async (_req, res, next) => {
         res.status(200).json(result.rows);
     } catch (error) {
         logger.error('Error al consultar bajo stock', { error: error.message });
+        next(error);
+    }
+};
+
+// DELETE /api/inventory/lotes/:id
+const deleteLote = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        await inventoryRepository.deleteLote(id);
+        res.status(200).json({ message: 'Lote eliminado exitosamente' });
+    } catch (error) {
+        logger.error('Error al eliminar lote', { error: error.message });
         next(error);
     }
 };
@@ -293,4 +334,6 @@ module.exports = {
     getLowStock,
     getAlerts,
     getKardex,
+    getLotesByProduct,
+    deleteLote,
 };

@@ -7,5 +7,6 @@ router.post('/open', sessionController.openSession);
 router.post('/close', sessionController.closeSession);
 router.get('/current', sessionController.getCurrentSession);
 router.get('/history', sessionController.getSessionsHistory);
+router.get('/:id/report', sessionController.getSessionReport);
 
 module.exports = router;

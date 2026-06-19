@@ -108,7 +108,8 @@ const deleteOrder = async (req, res, next) => {
 const getStats = async (req, res, next) => {
     try {
         const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
-        const data = await orderRepository.getStats(fecha);
+        const period = req.query.period || '7d';
+        const data = await orderRepository.getStats(fecha, period);
         
         const calcTrend = (hoy, ayer) => {
             if (ayer === 0 && hoy > 0) return 100;

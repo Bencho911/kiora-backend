@@ -19,7 +19,6 @@ const updateSettings = async (req, res, next) => {
         const { 
             cierre_caja_automatico, 
             hora_cierre_automatico, 
-            abrir_siguiente_automatico, 
             metodo_descuento_lote, 
             dias_alerta_vencimiento 
         } = req.body;
@@ -29,9 +28,8 @@ const updateSettings = async (req, res, next) => {
             SET 
                 cierre_caja_automatico = COALESCE($1, cierre_caja_automatico),
                 hora_cierre_automatico = COALESCE($2, hora_cierre_automatico),
-                abrir_siguiente_automatico = COALESCE($3, abrir_siguiente_automatico),
-                metodo_descuento_lote = COALESCE($4, metodo_descuento_lote),
-                dias_alerta_vencimiento = COALESCE($5, dias_alerta_vencimiento)
+                metodo_descuento_lote = COALESCE($3, metodo_descuento_lote),
+                dias_alerta_vencimiento = COALESCE($4, dias_alerta_vencimiento)
             WHERE id = 1
             RETURNING *
         `;
@@ -39,7 +37,6 @@ const updateSettings = async (req, res, next) => {
         const values = [
             cierre_caja_automatico, 
             hora_cierre_automatico, 
-            abrir_siguiente_automatico, 
             metodo_descuento_lote, 
             dias_alerta_vencimiento
         ];

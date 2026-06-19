@@ -13,3 +13,10 @@ npm-debug.log
 logs/
 *.log
 .DS_Store
+
+# Archivos de credenciales y caché de Python
+services/ai-service/credentials.json
+services/ai-service/token.json
+__pycache__/
+*.pyc
+

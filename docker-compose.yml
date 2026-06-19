@@ -157,17 +157,33 @@ services:
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       REDIS_HOST: kiora-redis
+      USERS_SERVICE_URL: http://users-service:3001
+      PRODUCTS_SERVICE_URL: http://products-service:3002
+      INVENTORY_SERVICE_URL: http://inventory-service:3003
+      ORDERS_SERVICE_URL: http://orders-service:3004
+      NOTIFICATIONS_SERVICE_URL: http://notifications-service:3005
+      REPORTS_SERVICE_URL: http://reports-service:3006
       ACTIVITY_SERVICE_URL: http://activity-service:3007
       AI_SERVICE_URL: http://ai-service:3008
     depends_on:
-      - users-service
-      - products-service
-      - inventory-service
-      - orders-service
-      - notifications-service
-      - reports-service
-      - activity-service
-      - ai-service
+      kiora-redis:
+        condition: service_healthy
+      users-service:
+        condition: service_started
+      products-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      orders-service:
+        condition: service_started
+      notifications-service:
+        condition: service_started
+      reports-service:
+        condition: service_started
+      activity-service:
+        condition: service_started
+      ai-service:
+        condition: service_started
 
   users-service:
     build:

@@ -30,7 +30,7 @@ async def run_autonomous_inventory_check():
         
         prompt_msg = {
             "role": "user",
-            "content": "Eres el asistente autónomo del negocio. Acabas de revisar el inventario. Analiza si hay productos críticos (bajo stock) y escribe un mensaje PROACTIVO al administrador informándole. Si encuentras productos bajos, ofrécele enviarle un correo al proveedor (ej. \"Tengo X productos bajos, ¿quieres que envíe el correo a Postobon pidiendo Y unidades?\"). Si todo está bien, envíale un mensaje de tranquilidad."
+            "content": "Eres un agente de compras autónomo. Analiza el inventario para encontrar productos críticos. Por cada producto bajo o agotado, REDACTA UN CORREO formal al proveedor solicitando la cantidad necesaria para reabastecer (basado en la predicción de agotamiento o faltante) y UTILIZA la herramienta 'send_supplier_email' para guardarlo en la carpeta de Borradores de Gmail. Al final, preséntame un resumen que diga: 'He analizado el inventario y guardé X correos en tus Borradores listos para enviar' y dime para qué proveedores fueron. Si todo está bien, envíame un mensaje de tranquilidad."
         }
 
         messages = [system_msg, prompt_msg]
@@ -44,10 +44,10 @@ async def run_autonomous_inventory_check():
 
 def start_cron_jobs():
     scheduler = AsyncIOScheduler()
-    # Ejecutar todos los días a las 9:00 AM
+    # Ejecutar todos los días a las 3:00 AM (madrugada)
     scheduler.add_job(
         run_autonomous_inventory_check,
-        trigger=CronTrigger(hour=9, minute=0)
+        trigger=CronTrigger(hour=3, minute=0)
     )
     scheduler.start()
     logger.info("[Cron] Tareas programadas iniciadas.")

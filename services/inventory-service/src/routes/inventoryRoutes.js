@@ -22,14 +22,18 @@ const {
     upsertSuministra,
     getAlerts,
     getKardex,
+    getLotesByProduct,
     getSuministraByProduct,
     getLowStock,
+    deleteLote,
 } = require('../controllers/inventoryController');
 
 /* ── Alertas (Kardex/Lotes) ───────────────────────────────────────────────── */
 
 router.get('/alerts', getAlerts);
 router.get('/products/:id/kardex', getKardex);
+router.get('/products/:id/lotes', getLotesByProduct);
+router.delete('/lotes/:id', deleteLote);
 
 /* ── Proveedores ──────────────────────────────────────────────────────────── */
 

@@ -23,6 +23,13 @@ const createSupplier = ({ id_prov, nom_prov, tel_prov, tipoid_prov, correo_prov,
         [id_prov, nom_prov, tel_prov, tipoid_prov, correo_prov, dir_prov]
     );
 
+const findSupplierByIdProv = (id_prov, exclude_cod_prov = null) => {
+    if (exclude_cod_prov) {
+        return db.query('SELECT * FROM Proveedor WHERE id_prov = $1 AND cod_prov != $2', [id_prov, exclude_cod_prov]);
+    }
+    return db.query('SELECT * FROM Proveedor WHERE id_prov = $1', [id_prov]);
+};
+
 const updateSupplier = (id, fields) => {
     const allowed = ['nom_prov', 'id_prov', 'tel_prov', 'tipoid_prov', 'correo_prov', 'dir_prov'];
     const entries = Object.entries(fields).filter(([key]) => allowed.includes(key));
@@ -239,6 +246,66 @@ const getKardexByProduct = (cod_prod) =>
     );
 
 /**
+ * Obtener todos los lotes de un producto
+ */
+const findLotesByProduct = (cod_prod) =>
+    db.query(
+        `SELECT * FROM lotes 
+         WHERE cod_prod = $1 AND estado = 'ACTIVO'
+         ORDER BY fecha_ingreso DESC`,
+        [cod_prod]
+    );
+
+/**
+ * Eliminar (inactivar) lote manualmente y generar historial
+ */
+const deleteLote = async (loteId) => {
+    const client = await db.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // 1. Obtener datos del lote
+        const loteRes = await client.query('SELECT * FROM lotes WHERE id = $1 FOR UPDATE', [loteId]);
+        if (loteRes.rows.length === 0) throw new Error('Lote no encontrado');
+        const lote = loteRes.rows[0];
+
+        if (lote.cantidad_actual > 0) {
+            // 2. Registrar movimiento de salida
+            await client.query(
+                `INSERT INTO movimientos_lote (lote_id, tipo_mov, cantidad, desc_mov)
+                 VALUES ($1, 'salida', $2, 'Lote eliminado manualmente')`,
+                [lote.id, lote.cantidad_actual]
+            );
+
+            // 3. Notificar a Products Service para restar el stock
+            try {
+                // Hacemos un PUT a /api/products/:cod_prod/stock con delta negativo
+                await fetch(`${process.env.PRODUCTS_SERVICE_URL || 'http://products:3002'}/api/products/${lote.cod_prod}/stock`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cantidad: -lote.cantidad_actual })
+                });
+            } catch (err) {
+                console.error('Error descontando stock en el servicio de productos', err);
+            }
+        }
+
+        // 4. Inactivar el lote y poner en 0
+        await client.query(
+            `UPDATE lotes SET estado = 'INACTIVO', cantidad_actual = 0 WHERE id = $1`,
+            [loteId]
+        );
+
+        await client.query('COMMIT');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
+/**
  * Obtener alertas de inventario (Bajo stock y lotes por vencer/vencidos)
  */
 const getAlerts = async () => {
@@ -277,4 +344,7 @@ module.exports = {
     findLowStock,
     getKardexByProduct,
     getAlerts,
+    findSupplierByIdProv,
+    findLotesByProduct,
+    deleteLote,
 };
