@@ -1,6 +1,5 @@
 'use strict';
 
-const logger = require('../config/logger');
 
 const ACTIVITY_URL = process.env.ACTIVITY_SERVICE_URL || 'http://activity-service:3007';
 

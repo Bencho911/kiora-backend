@@ -16,7 +16,7 @@ jobs:
         # docker compose comprueba que env_file exista aunque sea vacío; los reales están en .gitignore.
         run: |
           set -e
-          for svc in api-gateway users-service products-service inventory-service orders-service notifications-service reports-service; do
+          for svc in activity-service ai-service api-gateway inventory-service notifications-service orders-service products-service reports-service telegram-bot users-service; do
             touch "services/$svc/.env.docker"
           done
       - name: Validar sintaxis de docker-compose.yml

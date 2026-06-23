@@ -1,18 +1,6 @@
 const pool = require('../config/db');
 const logger = require('../config/logger');
-const axios = require('axios'); // Para consultar settings-service (users-service)
 
-// Helper para obtener configuración global
-const getSettings = async (token) => {
-    try {
-        const usersUrl = process.env.USERS_SERVICE_URL || 'http://users-service:3001';
-        const res = await axios.get(`${usersUrl}/api/settings/internal`);
-        return res.data;
-    } catch (error) {
-        logger.error('Error obteniendo ajustes', { error: error.message });
-        return { cierre_caja_automatico: true, hora_cierre_automatico: '03:00', abrir_siguiente_automatico: false };
-    }
-};
 
 const openSession = async (req, res, next) => {
     try {
