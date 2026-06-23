@@ -206,6 +206,7 @@ services:
       REDIS_PORT: 6379
       OTEL_SERVICE_NAME: users-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       users-db:
         condition: service_healthy
@@ -232,6 +233,7 @@ services:
       REDIS_HOST: kiora-redis
       OTEL_SERVICE_NAME: products-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      TZ: ${TZ:-America/Bogota}
     volumes:
       - products_uploads:/app/src/public/uploads
     depends_on:
@@ -262,6 +264,7 @@ services:
       USERS_SERVICE_URL: http://users-service:3001
       OTEL_SERVICE_NAME: inventory-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       inventory-db:
         condition: service_healthy
@@ -286,6 +289,7 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:3003
       OTEL_SERVICE_NAME: orders-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       orders-db:
         condition: service_healthy
@@ -309,6 +313,7 @@ services:
       DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@notifications-db:5432/kiora_notifications
       REDIS_HOST: kiora-redis
       REDIS_PORT: 6379
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       notifications-db:
         condition: service_healthy
@@ -325,6 +330,8 @@ services:
       - kiora-backend-net
     env_file:
       - ./services/reports-service/.env.docker
+    environment:
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       - orders-service
 
@@ -395,6 +402,7 @@ services:
       REDIS_HOST: kiora-redis
       REDIS_PORT: 6379
       API_GATEWAY_URL: http://api-gateway:3000/api
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       kiora-redis:
         condition: service_healthy
@@ -429,6 +437,7 @@ services:
       - ./services/ai-service/.env.docker
     environment:
       API_GATEWAY_URL: http://api-gateway:3000/api
+      TZ: ${TZ:-America/Bogota}
 
   activity-service:
     build:
@@ -443,6 +452,7 @@ services:
     environment:
       DB_HOST: activity-db
       DB_PORT: 5432
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       activity-db:
         condition: service_healthy
