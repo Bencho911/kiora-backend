@@ -7,7 +7,7 @@ const { loginSchema, registerSchema, updateUserSchema, updateRoleSchema, forgotP
 const {
     register, login, refresh, logout, unlockUser, blockUser, getUsers, getMe,
     updateUser, deleteUser, updateRole, forgotPassword, verifyResetCode, resetPassword, changePassword,
-    adminResetPassword
+    adminResetPassword, getAdminEmails
 } = require('../controllers/authController');
 
 const isTestEnv = process.env.NODE_ENV === 'test';
@@ -189,6 +189,15 @@ router.post('/logout', verifyToken, logout);
  *         description: Redis no disponible (BLACKLIST_FAIL_OPEN=false).
  */
 router.get('/users', verifyToken, isAdmin, getUsers);
+const internalOnly = (req, res, next) => {
+    const internalSecret = req.headers['x-internal-secret'];
+    if (internalSecret === (process.env.INTERNAL_SECRET || 'kiora_internal_2024')) {
+        return next();
+    }
+    return res.status(403).json({ error: 'Forbidden internal route' });
+};
+
+router.get('/users/admins', internalOnly, getAdminEmails);
 
 /**
  * @swagger

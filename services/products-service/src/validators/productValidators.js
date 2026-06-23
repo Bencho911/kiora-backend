@@ -12,16 +12,29 @@ const createProductSchema = Joi.object({
         'any.required': 'precio_unitario es obligatorio.',
         'number.min': 'El precio_unitario no puede ser negativo.',
     }),
-    fechaven_prod: Joi.date().iso().allow(null).optional().messages({
-        'date.format': 'fechaven_prod debe ser una fecha válida (ISO 8601).',
+    descuento: Joi.number().min(0).max(100).default(0).messages({
+        'number.min': 'descuento no puede ser negativo.',
+        'number.max': 'descuento no puede exceder 100.',
     }),
-    stock_actual: Joi.number().integer().min(0).default(0).messages({
+    codigo_barras: Joi.string().pattern(/^[0-9]+$/).allow('', null).max(50).optional().messages({
+        'string.pattern.base': 'El código de barras solo puede contener números.',
+        'string.max': 'codigo_barras no debe exceder 50 caracteres.',
+    }),
+    fechaven_prod: Joi.date().iso().allow(null).optional().min('now').messages({
+        'date.format': 'fechaven_prod debe ser una fecha válida (ISO 8601).',
+        'date.min': 'La fecha de vencimiento no puede ser anterior a hoy.',
+    }),
+    stock_actual: Joi.number().integer().min(0).required().messages({
+        'any.required': 'stock_actual es obligatorio.',
         'number.min': 'stock_actual no puede ser negativo.',
     }),
-    stock_minimo: Joi.number().integer().min(0).default(0).messages({
+    stock_minimo: Joi.number().integer().min(0).required().messages({
+        'any.required': 'stock_minimo es obligatorio.',
         'number.min': 'stock_minimo no puede ser negativo.',
     }),
-    fk_cod_cats: Joi.array().items(Joi.number().integer()).default([]).messages({
+    fk_cod_cats: Joi.array().items(Joi.number().integer()).min(1).required().messages({
+        'any.required': 'Debes asociar al menos una categoría.',
+        'array.min': 'Debes asociar al menos una categoría.',
         'array.base': 'fk_cod_cats debe ser un array de IDs de categorías.',
     }),
 });
@@ -34,8 +47,17 @@ const updateProductSchema = Joi.object({
     precio_unitario: Joi.number().min(0).messages({
         'number.min': 'El precio_unitario no puede ser negativo.',
     }),
-    fechaven_prod: Joi.date().iso().allow(null).messages({
+    descuento: Joi.number().min(0).max(100).messages({
+        'number.min': 'descuento no puede ser negativo.',
+        'number.max': 'descuento no puede exceder 100.',
+    }),
+    codigo_barras: Joi.string().pattern(/^[0-9]+$/).allow('', null).max(50).messages({
+        'string.pattern.base': 'El código de barras solo puede contener números.',
+        'string.max': 'codigo_barras no debe exceder 50 caracteres.',
+    }),
+    fechaven_prod: Joi.date().iso().allow(null).min('now').messages({
         'date.format': 'fechaven_prod debe ser una fecha válida (ISO 8601).',
+        'date.min': 'La fecha de vencimiento no puede ser anterior a hoy.',
     }),
     fk_cod_cats: Joi.array().items(Joi.number().integer()).messages({
         'array.base': 'fk_cod_cats debe ser un array de IDs de categorías.',

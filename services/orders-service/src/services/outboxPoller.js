@@ -7,7 +7,9 @@ const env = require('../config/env');
 const asyncContext = require('../utils/asyncContext');
 const { fetchWithRetry, DEFAULT_TIMEOUT_MS, NOTIFY_TIMEOUT_MS, outgoingHeaders } = require('../utils/httpClient');
 const stripeService = require('./stripeService');
+const factusService = require('./factusService');
 const orderRepository = require('../repositories/orderRepository');
+const invoiceRepository = require('../repositories/invoiceRepository');
 
 /**
  * Outbox Poller con retry inteligente, Dead-Letter Queue (DLQ)
@@ -22,6 +24,8 @@ const orderRepository = require('../repositories/orderRepository');
  * Tipos de evento soportados:
  * - inventory.movement: Descuento/entrada de stock
  * - inventory.reserve.commit: Confirmar reserva temporal
+ * - factus.invoice: Emitir factura electrónica ante la DIAN
+ * - factus.credit_note: Emitir nota crédito ante la DIAN (reembolso)
  *
  * Métricas de observabilidad expuestas vía getMetrics().
  */
@@ -92,6 +96,95 @@ async function processEvent(event) {
         } catch (err) {
             logger.warn('Outbox: fallo al confirmar reserva', {
                 id, event_type, error: err.message, retry_count: event.retry_count,
+            });
+            return { ok: false, businessError: false };
+        }
+    }
+
+    /* ── Facturación Electrónica (Factus/DIAN) ───────────────────────────── */
+
+    case 'factus.invoice': {
+        try {
+            const orderId = payload.orderId;
+            const order = await orderRepository.findByIdWithItems(orderId);
+            if (!order) {
+                logger.error('Outbox factus.invoice: orden no encontrada', { id, orderId });
+                return { ok: true }; // No reintentar, la orden no existe
+            }
+
+            // Emitir factura electrónica
+            const result = await factusService.createInvoice(order, order.items);
+
+            // Guardar datos de la factura en la BD
+            const invoiceResult = await invoiceRepository.findByVenta(orderId);
+            if (invoiceResult.rows.length > 0) {
+                await invoiceRepository.updateFactusFields(invoiceResult.rows[0].id, {
+                    factus_invoice_number: result.number,
+                    factus_cufe: result.cufe,
+                    factus_public_url: result.public_url,
+                    factus_qr_link: result.qr_link,
+                    factus_status: 'validated',
+                });
+            }
+
+            logger.info('Outbox: factura electrónica emitida', {
+                id, orderId, factusNumber: result.number,
+            });
+            return { ok: true };
+        } catch (err) {
+            // Si es error de validación (422) de Factus, marcar como fallo de negocio
+            if (err.status && err.status === 422) {
+                logger.error('Outbox factus.invoice: error de validación Factus', {
+                    id, orderId: payload.orderId, errors: err.factusErrors,
+                });
+                // Marcar la factura como fallida pero no compensar la orden
+                const invoiceResult = await invoiceRepository.findByVenta(payload.orderId);
+                if (invoiceResult.rows.length > 0) {
+                    await invoiceRepository.updateFactusFields(invoiceResult.rows[0].id, {
+                        factus_status: 'failed',
+                    });
+                }
+                return { ok: true }; // No reintentar errores de validación
+            }
+            logger.warn('Outbox factus.invoice: fallo temporal', {
+                id, error: err.message, retry_count: event.retry_count,
+            });
+            return { ok: false, businessError: false };
+        }
+    }
+
+    case 'factus.credit_note': {
+        try {
+            const { orderId, billNumber, invoiceId } = payload;
+            const order = await orderRepository.findByIdWithItems(orderId);
+            if (!order) {
+                logger.error('Outbox factus.credit_note: orden no encontrada', { id, orderId });
+                return { ok: true };
+            }
+
+            // Emitir nota crédito
+            await factusService.createCreditNote(billNumber, order, order.items);
+
+            // Actualizar estado de la factura
+            if (invoiceId) {
+                await invoiceRepository.updateFactusFields(invoiceId, {
+                    factus_status: 'credit_noted',
+                });
+            }
+
+            logger.info('Outbox: nota crédito emitida ante DIAN', {
+                id, orderId, billNumber,
+            });
+            return { ok: true };
+        } catch (err) {
+            if (err.status && err.status === 422) {
+                logger.error('Outbox factus.credit_note: error de validación Factus', {
+                    id, errors: err.factusErrors,
+                });
+                return { ok: true }; // No reintentar
+            }
+            logger.warn('Outbox factus.credit_note: fallo temporal', {
+                id, error: err.message, retry_count: event.retry_count,
             });
             return { ok: false, businessError: false };
         }

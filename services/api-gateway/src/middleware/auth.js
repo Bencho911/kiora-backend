@@ -29,8 +29,16 @@ const PUBLIC_PREFIXES = [
     '/metrics',
     '/api/docs',            // Swagger UI (HTML, JS, CSS)
     '/api/docs.json',       // Specs JSON proxy de products/inventory/orders
-    '/api/auth/',           // login, register, refresh, forgot-password, etc.
-    '/api/v1/auth/',        // versioned auth routes
+    '/api/auth/login',
+    '/api/auth/refresh',
+    '/api/auth/forgot-password',
+    '/api/auth/reset-password',
+    '/api/auth/verify-reset-code',
+    '/api/v1/auth/login',
+    '/api/v1/auth/refresh',
+    '/api/v1/auth/forgot-password',
+    '/api/v1/auth/reset-password',
+    '/api/v1/auth/verify-reset-code',
     '/api/public/',         // Catálogo público del kiosco (sin auth)
     '/api/users/health',
     '/api/users/ready',
@@ -38,15 +46,25 @@ const PUBLIC_PREFIXES = [
     '/api/v1/users/health',
     '/api/v1/users/ready',
     '/api/orders/checkout/webhook', // Webhooks de Stripe (externo)
+    '/uploads',             // Imágenes de productos (acceso público)
 ];
 
-const isPublicRoute = (path) =>
-    PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix));
+// Rutas GET públicas por path exacto (método + path específico)
+const PUBLIC_GET_ROUTES = [
+    '/api/ai/business-state',
+];
+
+const isPublicRoute = (req) => {
+    const { path, method } = req;
+    if (PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;
+    if (method === 'GET' && PUBLIC_GET_ROUTES.includes(path)) return true;
+    return false;
+};
 
 // ── Middleware ─────────────────────────────────────────────────────────────
 const authMiddleware = (req, res, next) => {
     // 1. Verificar si es ruta pública
-    if (isPublicRoute(req.path)) {
+    if (isPublicRoute(req)) {
         return next();
     }
 

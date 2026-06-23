@@ -11,17 +11,19 @@ const ExcelJS = require('exceljs');
  * retroactivamente a cualquier celda.
  */
 
-// ── Paleta corporativa Kiora ──────────────────────────────────────────────
+// ── Paleta corporativa Kiora (Rojo marca) ─────────────────────────────────
 const COLORS = {
-    primary:    'FF1B4F72',  // Azul oscuro Kiora
-    secondary:  'FF2E86C1',  // Azul medio
-    accent:     'FF27AE60',  // Verde acento
+    primary:    'FFEC131E',  // Rojo Kiora
+    darkRed:    'FF8B0000',  // Rojo oscuro
+    secondary:  'FF2E86C1',  // Azul medio (contaste)
+    accent:     'FF27AE60',  // Verde
     warning:    'FFE67E22',  // Naranja
     danger:     'FFE74C3C',  // Rojo
-    light:      'FFEBF5FB',  // Azul claro fondo
+    light:      'FFFDE8EA',  // Rosa claro (fondo)
+    light2:     'FFFFF5F5',  // Rosa más claro (zebra)
     white:      'FFFFFFFF',
-    dark:       'FF2C3E50',
-    gray:       'FF95A5A6',
+    dark:       'FF1A1A1A',
+    gray:       'FF6B7280',
 };
 
 const HEADER_FILL = {
@@ -84,7 +86,7 @@ const styleCells = (sheet) => {
                 cell.fill = {
                     type: 'pattern',
                     pattern: 'solid',
-                    fgColor: { argb: COLORS.light },
+                    fgColor: { argb: COLORS.light2 },
                 };
             });
         }

@@ -3,6 +3,7 @@
 const productRepository = require('../repositories/productRepository');
 const cacheService = require('../services/cacheService');
 const parsePagination = require('../utils/parsePagination');
+const logActivity = require('../utils/logActivity');
 const logger = require('../config/logger');
 
 /**
@@ -63,8 +64,12 @@ const getProductById = async (req, res, next) => {
 
 // POST /api/products  (HU10)
 const createProduct = async (req, res, next) => {
-    const { nom_prod, descrip_prod, precio_unitario, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo } = req.body;
-    const url_imagen = req.file ? (req.file.path || null) : null;
+    const { nom_prod, descrip_prod, precio_unitario, descuento, fechaven_prod, fk_cod_cats, stock_actual, stock_minimo, codigo_barras } = req.body;
+    const url_imagen = req.file
+        ? (req.file.path?.startsWith('http')
+            ? req.file.path
+            : `/uploads/${req.file.filename}`)
+        : null;
 
     let parsedCats = [];
     if (fk_cod_cats) {
@@ -78,15 +83,29 @@ const createProduct = async (req, res, next) => {
     }
 
     try {
+        const existing = await productRepository.findByName(nom_prod);
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ error: 'Ya existe un producto con ese nombre.', code: 'DUPLICATE_PRODUCT' });
+        }
+
+        if (codigo_barras) {
+            const existingBarcode = await productRepository.findByBarcode(codigo_barras);
+            if (existingBarcode.rows.length > 0) {
+                return res.status(409).json({ error: 'El código de barras ya está registrado.', code: 'DUPLICATE_BARCODE' });
+            }
+        }
+
         const result = await productRepository.create({
             nom_prod,
             descrip_prod: descrip_prod || null,
             precio_unitario: Number(precio_unitario),
+            descuento: descuento !== undefined ? Number(descuento) : 0,
             fechaven_prod: fechaven_prod || null,
             fk_cod_cats: parsedCats,
             stock_actual: Number(stock_actual || 0),
             stock_minimo: Number(stock_minimo || 0),
-            url_imagen
+            url_imagen,
+            codigo_barras: codigo_barras || null
         });
         logger.info('Producto creado', { cod_prod: result.rows[0].cod_prod });
 
@@ -94,6 +113,8 @@ const createProduct = async (req, res, next) => {
         await cacheService.invalidate('products');
 
         res.status(201).json(result.rows[0]);
+
+        logActivity({ user_email: req.user?.correo_usu, action: 'created', entity_type: 'product', entity_id: result.rows[0]?.cod_prod, details: `Producto "${result.rows[0]?.nom_prod}" creado` });
     } catch (error) {
         if (error.code === '23503') {
             return res.status(400).json({ error: `Una de las categorías proporcionadas no existe.`, code: 'FK_NOT_FOUND' });
@@ -111,8 +132,10 @@ const updateProduct = async (req, res, next) => {
     try {
         const fields = { ...req.body };
 
-        if (req.file && req.file.path) {
-            fields.url_imagen = req.file.path;
+        if (req.file) {
+            fields.url_imagen = req.file.path?.startsWith('http')
+                ? req.file.path
+                : `/uploads/${req.file.filename}`;
         }
 
         if (fields.precio_unitario !== undefined) fields.precio_unitario = Number(fields.precio_unitario);
@@ -128,6 +151,42 @@ const updateProduct = async (req, res, next) => {
                 fields.fk_cod_cats = Array.isArray(fields.fk_cod_cats) ? fields.fk_cod_cats.map(Number) : [Number(fields.fk_cod_cats)];
             }
         }
+        
+        const existingResult = await productRepository.findById(productId);
+        if (existingResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Producto no encontrado.', code: 'NOT_FOUND' });
+        }
+        const existing = existingResult.rows[0];
+
+        if (fields.codigo_barras) {
+            const existingBarcode = await productRepository.findByBarcode(fields.codigo_barras);
+            if (existingBarcode.rows.length > 0 && existingBarcode.rows[0].cod_prod !== productId) {
+                return res.status(409).json({ error: 'El código de barras ya está registrado por otro producto.', code: 'DUPLICATE_BARCODE' });
+            }
+        }
+
+        let hasChanges = false;
+        for (const key of Object.keys(fields)) {
+            if (key === 'fk_cod_cats') {
+                const arr1 = [...fields[key]].sort();
+                const arr2 = [...(existing[key] || [])].sort();
+                if (JSON.stringify(arr1) !== JSON.stringify(arr2)) { hasChanges = true; break; }
+            } else if (key === 'fechaven_prod' && fields[key]) {
+                const d1 = new Date(fields[key]).toISOString().split('T')[0];
+                const d2 = existing[key] ? new Date(existing[key]).toISOString().split('T')[0] : null;
+                if (d1 !== d2) { hasChanges = true; break; }
+            } else if (Number.isNaN(Number(fields[key])) && Number.isNaN(Number(existing[key]))) {
+                if (String(fields[key]) !== String(existing[key])) { hasChanges = true; break; }
+            } else if (fields[key] !== existing[key]) {
+                if (fields[key] == existing[key]) continue; // loose equality for numbers/strings
+                hasChanges = true;
+                break;
+            }
+        }
+
+        if (!hasChanges) {
+            return res.status(200).json({ message: 'No se detectaron cambios', ...existing });
+        }
 
         const result = await productRepository.update(productId, fields);
         if (result.rows.length === 0) {
@@ -139,6 +198,8 @@ const updateProduct = async (req, res, next) => {
         await cacheService.invalidate('products');
 
         res.status(200).json(result.rows[0]);
+
+        logActivity({ user_email: req.user?.correo_usu, action: 'updated', entity_type: 'product', entity_id: id, details: `Producto "${result.rows[0]?.nom_prod}" actualizado` });
     } catch (error) {
         if (error.code === '23503') {
             return res.status(400).json({ error: `Una de las categorías proporcionadas no existe.`, code: 'FK_NOT_FOUND' });
@@ -152,6 +213,22 @@ const updateProduct = async (req, res, next) => {
 const deleteProduct = async (req, res, next) => {
     const { id } = req.params;
     try {
+        // Verificar si tiene historial de ventas consultando a orders-service
+        const ordersUrl = process.env.ORDERS_SERVICE_URL || 'http://orders-service:3004';
+        try {
+            const checkRes = await fetch(`${ordersUrl}/api/orders/products/${id}/has-sales`);
+            if (checkRes.ok) {
+                const data = await checkRes.json();
+                if (data.hasSales) {
+                    return res.status(409).json({
+                        error: 'No se puede eliminar el producto porque está vinculado a una o más ventas históricas.',
+                        code: 'HAS_SALES_HISTORY'
+                    });
+                }
+            }
+        } catch (fetchErr) {
+            logger.warn('No se pudo contactar a orders-service para verificar ventas', { error: fetchErr.message });
+        }
         const result = await productRepository.remove(id);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Producto no encontrado.', code: 'NOT_FOUND' });
@@ -162,6 +239,8 @@ const deleteProduct = async (req, res, next) => {
         await cacheService.invalidate('products');
 
         res.status(200).json({ message: 'Producto eliminado exitosamente.' });
+
+        logActivity({ user_email: req.user?.correo_usu, action: 'deleted', entity_type: 'product', entity_id: id, details: `Producto "${result.rows[0]?.nom_prod}" eliminado` });
     } catch (error) {
         logger.error('Error al eliminar producto', { error: error.message });
         next(error);
@@ -211,14 +290,17 @@ const updateStock = async (req, res, next) => {
             // Enviar notificación en tiempo real vía Redis Stream (payload JSON estructurado)
             const redisClient = cacheService.getRedis();
             if (redisClient) {
+                const adminEmails = process.env.ADMIN_EMAIL || 'admin@kiora.com';
                 const payload = JSON.stringify({
-                    to: process.env.ADMIN_EMAIL || 'admin@kiora.com',
+                    to: adminEmails,
                     subject: '⚠️ Alerta: Stock Crítico (Actualización Directa)',
-                    event_type: 'CRITICAL_STOCK_UPDATE',
-                    cod_prod: id,
-                    nom_prod: producto.nom_prod,
-                    stock_actual: producto.stock_actual,
-                    stock_minimo: producto.stock_minimo
+                    html: `<div style="font-family:sans-serif;padding:20px;">
+                        <h2 style="color:#C41E1E;">⚠️ Stock Crítico Detectado</h2>
+                        <p>Producto: <strong>${producto.nom_prod || 'ID #' + id}</strong></p>
+                        <p>Stock Actual: <strong style="color:#C41E1E;">${producto.stock_actual}</strong></p>
+                        <p>Stock Mínimo: <strong>${producto.stock_minimo}</strong></p>
+                        <hr><p style="color:#888;">Actualización directa desde products-service</p>
+                    </div>`,
                 });
                 redisClient.xadd('kiora:notifications:stream', '*', 'payload', payload).catch(err => {
                     logger.error('Error al enviar alerta a Redis', { error: err.message });

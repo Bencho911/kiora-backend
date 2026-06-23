@@ -4,6 +4,7 @@ const orderRepository = require('../repositories/orderRepository');
 const invoiceRepository = require('../repositories/invoiceRepository');
 const db = require('../config/db');
 const logger = require('../config/logger');
+const stripeService = require('./stripeService');
 const { outgoingHeaders, fetchWithRetry, NOTIFY_TIMEOUT_MS } = require('../utils/httpClient');
 
 /**
@@ -25,7 +26,7 @@ const { outgoingHeaders, fetchWithRetry, NOTIFY_TIMEOUT_MS } = require('../utils
  */
 async function createOrder(data) {
     const KIOSKO_USER_ID = Number(process.env.KIOSKO_USER_ID || 1);
-    const order = await orderRepository.createWithItems({ ...data, id_usu: KIOSKO_USER_ID });
+    const order = await orderRepository.createWithItems({ ...data, id_usu: KIOSKO_USER_ID, descuento_global: data.descuento_global });
     logger.info('Venta creada', { id_vent: order.id_vent });
     return order;
 }
@@ -38,7 +39,7 @@ async function createOrder(data) {
  * Flujo:
  * 1. Validar estado de la orden (idempotencia, transición válida)
  * 2. BEGIN transacción
- *    a. UPDATE Ventas → 'completada'
+ *    a. UPDATE Ventas → 'completada' (+ stripe_payment_id si aplica)
  *    b. INSERT Factura
  *    c. INSERT outbox_events (inventory.movement) × N ítems
  * 3. COMMIT
@@ -50,8 +51,9 @@ async function createOrder(data) {
  *
  * @param {number} orderId
  * @param {object} reqHeaders — Headers del request original (para correlation-id)
+ * @param {string} [stripePaymentId] — PaymentIntent de Stripe (opcional, desde webhook)
  */
-async function completeOrder(orderId, reqHeaders) {
+async function completeOrder(orderId, reqHeaders, stripePaymentId) {
     const order = await orderRepository.findByIdWithItems(orderId);
     if (!order) return { error: 'Venta no encontrada.', status: 404 };
 
@@ -81,9 +83,18 @@ async function completeOrder(orderId, reqHeaders) {
     try {
         await client.query('BEGIN');
 
-        // 1. Marcar venta como completada
+        // 1. Marcar venta como completada (incluye stripe_payment_id si viene del webhook)
         const result = await orderRepository.updateStatus(orderId, 'completada', client);
         updatedOrder = result.rows[0];
+
+        // 1b. Guardar stripe_payment_id dentro de la misma transacción para evitar
+        //     datos huérfanos (orden completada sin ID de pago → imposible reembolsar)
+        if (stripePaymentId) {
+            await client.query(
+                'UPDATE Ventas SET stripe_payment_id = $1, metodopago_usu = $2 WHERE id_vent = $3',
+                [stripePaymentId, 'stripe_tarjeta', orderId]
+            );
+        }
 
         // 2. Generar factura
         const totalQty = order.items.reduce((sum, i) => sum + i.cantidad, 0);
@@ -111,6 +122,17 @@ async function completeOrder(orderId, reqHeaders) {
             );
         }
 
+        // 4. Insertar evento outbox para facturación electrónica (Factus/DIAN)
+        await orderRepository.insertOutboxEvent(
+            'factus.invoice',
+            {
+                orderId: Number(orderId),
+                montofinal_vent: updatedOrder.montofinal_vent,
+                metodopago_usu: updatedOrder.metodopago_usu,
+            },
+            client
+        );
+
         await client.query('COMMIT');
         logger.info('Transacción Outbox completada', {
             id_vent: orderId,
@@ -122,7 +144,7 @@ async function completeOrder(orderId, reqHeaders) {
         logger.error('Error en transacción Outbox de completeOrder', {
             orderId, error: err.message,
         });
-        throw err;
+        return { ok: false, error: `Error en transacción: ${err.message}`, code: 'TRANSACTION_ERROR', status: 500 };
     } finally {
         client.release();
     }
@@ -180,19 +202,31 @@ async function updateStatus(orderId, estado, reqHeaders) {
         };
     }
 
-    // ── Reembolso: Outbox Pattern (consistencia eventual) ──
-    // En lugar de HTTP síncrono a inventory-service (que se caía si el servicio no respondía),
-    // encolamos eventos outbox dentro de la misma transacción que actualiza el estado.
-    // El Outbox Poller se encarga de despachar los movimientos de entrada de stock.
+    // ── Reembolso: Stripe + Inventario (Outbox) + Nota Crédito Factus ──
     if (estado === 'reembolsada') {
-        logger.info('Procesando reembolso de inventario vía Outbox', { orderId });
+        logger.info('Procesando reembolso completo', { orderId });
 
+        // 1. Reembolso en Stripe (si la venta se pagó con tarjeta)
+        if (order.stripe_payment_id) {
+            try {
+                await stripeService.createRefund(order.stripe_payment_id);
+                logger.info('Stripe: reembolso emitido', { orderId, paymentId: order.stripe_payment_id });
+            } catch (stripeErr) {
+                logger.error('CRÍTICO: Falló reembolso Stripe', {
+                    orderId, stripe_payment_id: order.stripe_payment_id, error: stripeErr.message,
+                });
+                // Continuamos con el reembolso interno; el reembolso Stripe se hará manualmente
+            }
+        }
+
+        // 2. Transacción atómica: estado + inventario + nota crédito Factus
         const client = await db.connect();
         try {
             await client.query('BEGIN');
 
             const updated = await orderRepository.updateStatus(orderId, 'reembolsada', client);
 
+            // 2a. Eventos outbox para devolver inventario
             for (const item of order.items) {
                 await orderRepository.insertOutboxEvent(
                     'inventory.movement',
@@ -207,8 +241,27 @@ async function updateStatus(orderId, estado, reqHeaders) {
                 );
             }
 
+            // 2b. Evento outbox para emitir nota crédito en Factus (DIAN)
+            const invoiceResult = await invoiceRepository.findByVentaWithFactus(orderId);
+            const invoice = invoiceResult.rows[0];
+            if (invoice && invoice.factus_invoice_number) {
+                await orderRepository.insertOutboxEvent(
+                    'factus.credit_note',
+                    {
+                        orderId: Number(orderId),
+                        billNumber: invoice.factus_invoice_number,
+                        invoiceId: invoice.id,
+                        montofinal_vent: order.montofinal_vent,
+                        metodopago_usu: order.metodopago_usu,
+                    },
+                    client
+                );
+            } else {
+                logger.warn('Reembolso: no se encontró factura Factus para emitir NC', { orderId });
+            }
+
             await client.query('COMMIT');
-            logger.info('Reembolso encolado vía Outbox', { orderId, items: order.items.length });
+            logger.info('Reembolso encolado vía Outbox (inventario + NC Factus)', { orderId, items: order.items.length });
             return { ok: true, data: updated.rows[0] };
         } catch (err) {
             await client.query('ROLLBACK');

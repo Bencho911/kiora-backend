@@ -159,17 +159,3 @@ npm run migrate:up:docker # Aplica migraciones en contenedor Docker
 > **reports-service:** `npm audit` puede listar hallazgos **moderate** en la cadena **exceljs → uuid**; `audit:ci` usa `--audit-level=high` como en el resto de servicios. Cuando **exceljs** (o un sustituto) permita **uuid** parcheado sin romper CommonJS/Jest, conviene revisar de nuevo.
 
 ---
-
-## ☁️ Despliegue en Producción (Azure VM)
-
-La arquitectura de Kiora Backend está preparada para desplegarse ágilmente en una Máquina Virtual de Azure utilizando scripts de aprovisionamiento automáticos.
-
-**Guía completa:** 📖 [docs/AZURE_VM_DEPLOYMENT.md](docs/AZURE_VM_DEPLOYMENT.md)
-
-### Resumen de Operación
-El sistema se empaca localmente y se sincroniza hacia una Máquina Virtual Ubuntu en la nube.
-1. Se provisiona la infraestructura usando `./scripts/azure_vm_provision.sh` (requiere `az login`).
-2. Se sincroniza el código y se ejecuta la orquestación remotamente mediante `./scripts/azure_vm_deploy.sh`.
-3. Las migraciones de base de datos (`node-pg-migrate`) se ejecutan **automáticamente** durante el ciclo de vida de arranque de cada microservicio en la VM, gracias a la inyección de `DATABASE_URL` centralizada en el `docker-compose.yml`.
-
-*Seguridad:* Actualmente, el API Gateway en despliegues IP puros tiene `Content-Security-Policy` temporalmente inhabilitada en `helmet` para permitir el acceso interactivo a Swagger UI sin bloqueos HTTPS del navegador. Ver guía de despliegue para los pasos de implementación SSL.

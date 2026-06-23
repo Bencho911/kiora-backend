@@ -45,21 +45,31 @@ const findByIdWithItems = async (id_vent) => {
  * Crea una venta con sus líneas en una sola transacción.
  * @param {{ metodopago_usu, items: Array<{cod_prod, cantidad, precio_unit}> }} data
  */
-const createWithItems = async ({ metodopago_usu, items }) => {
+const createWithItems = async ({ metodopago_usu, items, descuento_global }) => {
     const client = await db.connect();
     try {
         await client.query('BEGIN');
 
-        const montofinal = items.reduce(
+        let montofinal = items.reduce(
             (sum, i) => sum + Number(i.precio_unit) * Number(i.cantidad),
             0
         );
+        if (descuento_global && descuento_global > 0) {
+            montofinal = montofinal * (1 - Math.min(descuento_global, 100) / 100);
+        }
         const precio_prod_final = items.length > 0 ? Number(items[0].precio_unit) : 0;
 
+        // Buscar sesión ABIERTA
+        const sessionRes = await client.query("SELECT id FROM sesion_caja WHERE estado = 'ABIERTA'");
+        if (sessionRes.rows.length === 0) {
+            throw { status: 403, message: 'La caja está cerrada. Debes abrir una sesión para realizar ventas.', code: 'BUSINESS_CLOSED' };
+        }
+        const sesion_id = sessionRes.rows[0].id;
+
         const ventaRes = await client.query(
-            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, estado)
-             VALUES ($1, $2, $3, 'pendiente') RETURNING *`,
-            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null]
+            `INSERT INTO Ventas (precio_prod_final, montofinal_vent, metodopago_usu, estado, sesion_id)
+             VALUES ($1, $2, $3, 'pendiente', $4) RETURNING *`,
+            [precio_prod_final, montofinal.toFixed(2), metodopago_usu || null, sesion_id]
         );
         const venta = ventaRes.rows[0];
 
@@ -111,11 +121,22 @@ const updateStatus = (id_vent, estado, client = db) =>
         [estado, id_vent]
     );
 
+/**
+ * Guarda el stripe_payment_id en una orden pagada (para reembolsos futuros).
+ * @param {number} id_vent
+ * @param {string} paymentIntent
+ */
+const updatePaymentInfo = (id_vent, paymentIntent) =>
+    db.query(
+        'UPDATE Ventas SET stripe_payment_id = $1, metodopago_usu = $2 WHERE id_vent = $3',
+        [paymentIntent, 'stripe_tarjeta', id_vent]
+    );
+
 const remove = (id_vent) =>
     db.query('DELETE FROM Ventas WHERE id_vent = $1 RETURNING id_vent', [id_vent]);
 
-const getStats = (fecha) =>
-    db.query(
+const getStats = async (fecha, period = '7d') => {
+    const statsHoyQuery = db.query(
         `SELECT
             COUNT(*)::int AS total_ventas,
             COALESCE(SUM(montofinal_vent), 0) AS monto_total,
@@ -131,6 +152,100 @@ const getStats = (fecha) =>
         [fecha]
     );
 
+    const statsAyerQuery = db.query(
+        `SELECT
+            COUNT(*)::int AS total_ventas,
+            COALESCE(SUM(montofinal_vent), 0) AS monto_total,
+            CASE WHEN COUNT(*) > 0 THEN SUM(montofinal_vent) / COUNT(*) ELSE 0 END AS ticket_promedio
+         FROM Ventas
+         WHERE fecha_vent::date = ($1::date - INTERVAL '1 day')`,
+        [fecha]
+    );
+
+    const pagosHoyQuery = db.query(
+        `SELECT 
+            COUNT(*) FILTER (WHERE metodopago_usu ILIKE '%efectivo%')::int AS pagos_efectivo,
+            COUNT(*) FILTER (WHERE metodopago_usu NOT ILIKE '%efectivo%' OR metodopago_usu IS NULL)::int AS pagos_tarjeta
+         FROM Ventas
+         WHERE fecha_vent::date = $1::date`,
+        [fecha]
+    );
+
+    let evolucionQueryStr = '';
+    
+    if (period === 'this_month') {
+        evolucionQueryStr = `
+            SELECT 
+                EXTRACT(DAY FROM d) AS dow,
+                COALESCE(SUM(v.montofinal_vent), 0) AS total
+            FROM generate_series(date_trunc('month', $1::date), date_trunc('month', $1::date) + interval '1 month' - interval '1 day', '1 day'::interval) d
+            LEFT JOIN Ventas v ON v.fecha_vent::date = d::date
+            GROUP BY d
+            ORDER BY d`;
+    } else if (period === 'this_year') {
+        evolucionQueryStr = `
+            SELECT 
+                EXTRACT(MONTH FROM d) AS dow,
+                COALESCE(SUM(v.montofinal_vent), 0) AS total
+            FROM generate_series(date_trunc('year', $1::date), date_trunc('year', $1::date) + interval '11 months', '1 month'::interval) d
+            LEFT JOIN Ventas v ON date_trunc('month', v.fecha_vent::date) = d::date
+            GROUP BY d
+            ORDER BY d`;
+    } else {
+        // default 7d
+        evolucionQueryStr = `
+            SELECT 
+                EXTRACT(ISODOW FROM d) AS dow,
+                COALESCE(SUM(v.montofinal_vent), 0) AS total
+            FROM generate_series($1::date - INTERVAL '6 days', $1::date, '1 day'::interval) d
+            LEFT JOIN Ventas v ON v.fecha_vent::date = d::date
+            GROUP BY d
+            ORDER BY d`;
+    }
+
+    const evolucionQuery = db.query(evolucionQueryStr, [fecha]);
+
+    const [hoyRes, ayerRes, pagosRes, evolucionRes] = await Promise.all([
+        statsHoyQuery,
+        statsAyerQuery,
+        pagosHoyQuery,
+        evolucionQuery
+    ]);
+
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    
+    const evolucion = evolucionRes.rows.map(r => {
+        let name = 'X';
+        if (period === 'this_month') {
+            name = String(r.dow);
+        } else if (period === 'this_year') {
+            name = monthNames[Number(r.dow)] || 'X';
+        } else {
+            name = dayNames[Number(r.dow)] || 'X';
+        }
+        return {
+            name,
+            total: Number(r.total)
+        };
+    });
+
+    return {
+        hoy: hoyRes.rows[0] || { total_ventas: 0, monto_total: 0, ticket_promedio: 0, ultima_venta: null },
+        ayer: ayerRes.rows[0] || { total_ventas: 0, monto_total: 0, ticket_promedio: 0 },
+        pagos: pagosRes.rows[0] || { pagos_efectivo: 0, pagos_tarjeta: 0 },
+        evolucion
+    };
+};
+
+const checkProductInSales = async (cod_prod) => {
+    const result = await db.query(
+        'SELECT 1 FROM Producto_Venta WHERE cod_prod = $1 LIMIT 1',
+        [cod_prod]
+    );
+    return result.rows.length > 0;
+};
+
 module.exports = {
     findAll,
     countAll,
@@ -140,5 +255,7 @@ module.exports = {
     createWithItems,
     insertOutboxEvent,
     updateStatus,
+    updatePaymentInfo,
     remove,
+    checkProductInSales,
 };

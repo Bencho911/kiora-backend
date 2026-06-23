@@ -22,9 +22,9 @@ const generateReceiptPdf = async (req, res) => {
         // 2. Iniciamos el Stream (consume nula memoria ya que drena los chunks)
         await generateInvoicePDF(orderData, res);
     } catch (e) {
-        logger.error('Error generando PDF', { error: e.message });
+        logger.error('Error generando PDF', { error: e?.message ?? 'Error desconocido (valor: ' + typeof e + ')' });
         if (!res.headersSent) {
-            res.status(500).json({ error: 'Error interno dibujando el reporte de PDFKit.' });
+            res.status(500).json({ error: 'Error interno generando el PDF.' });
         }
     }
 };

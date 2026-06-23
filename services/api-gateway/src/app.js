@@ -122,6 +122,8 @@ const services = {
     orders: process.env.ORDERS_SERVICE_URL || 'http://localhost:3004',
     notifications: process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:3005',
     reports: process.env.REPORTS_SERVICE_URL || 'http://localhost:3006',
+    activity: process.env.ACTIVITY_SERVICE_URL || 'http://localhost:3007',
+    ai: process.env.AI_SERVICE_URL || 'http://localhost:3008',
 };
 
 // ── Proxy factory ─────────────────────────────────────────────────────────
@@ -149,17 +151,18 @@ const transparentProxy = (serviceName, target) =>
         },
     });
 
-// ── Rutas públicas (sin JWT) — Catálogo del kiosco ────────────────────────
-app.use('/api/public/products', createProxyMiddleware({
+app.use(createProxyMiddleware({
+    pathFilter: '/api/public/products',
     target: services.products,
     changeOrigin: true,
-    pathRewrite: (path, req) => req.originalUrl.replace('/api/public/products', '/api/products'),
+    pathRewrite: { '^/api/public/products': '/api/products' },
     on: { error: onProxyError('products-service (public)') },
 }));
-app.use('/api/public/categories', createProxyMiddleware({
+app.use(createProxyMiddleware({
+    pathFilter: '/api/public/categories',
     target: services.products,
     changeOrigin: true,
-    pathRewrite: (path, req) => req.originalUrl.replace('/api/public/categories', '/api/categories'),
+    pathRewrite: { '^/api/public/categories': '/api/categories' },
     on: { error: onProxyError('products-service (public)') },
 }));
 
@@ -180,6 +183,7 @@ const swaggerOptions = {
             { url: '/api/docs.json?svc=orders', name: 'Orders Service' },
             { url: '/api/docs.json?svc=reports', name: 'Reports Service' },
             { url: '/api/docs.json?svc=notifications', name: 'Notifications Service' },
+            { url: '/api/docs.json?svc=ai', name: 'AI Service' },
         ],
     },
 };
@@ -233,7 +237,9 @@ app.use('/api/v1/orders', v1Proxy('orders-service', services.orders, '/orders'))
 app.use('/api/v1/invoices', v1Proxy('orders-service', services.orders, '/invoices'));
 app.use('/api/v1/notifications', v1Proxy('notifications-service', services.notifications, '/notifications'));
 app.use('/api/v1/reports', v1Proxy('reports-service', services.reports, '/reports'));
+app.use('/api/v1/activity-logs', v1Proxy('activity-service', services.activity, '/activity-logs'));
 app.use('/api/v1/incidents', v1Proxy('users-service', services.users, '/incidents'));
+app.use('/api/v1/ai', v1Proxy('ai-service', services.ai, '/ai'));
 
 // ── Legacy routes (/api/*) — backwards compatible, with deprecation header ─
 app.use('/api/users', transparentProxy('users-service', services.users));
@@ -245,7 +251,15 @@ app.use('/api/orders', transparentProxy('orders-service', services.orders));
 app.use('/api/invoices', transparentProxy('orders-service', services.orders));
 app.use('/api/notifications', transparentProxy('notifications-service', services.notifications));
 app.use('/api/reports', transparentProxy('reports-service', services.reports));
+app.use('/api/activity-logs', transparentProxy('activity-service', services.activity));
 app.use('/api/incidents', transparentProxy('users-service', services.users));
+app.use('/api/settings', transparentProxy('users-service', services.users));
+
+// AI routes
+app.use('/api/ai', transparentProxy('ai-service', services.ai));
+
+// ── Imágenes subidas (proxy a products-service) ──────────────────────────
+app.use('/uploads', transparentProxy('products-service', services.products));
 
 // ── Health checks ─────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
@@ -255,7 +269,11 @@ app.get('/health', (_req, res) => {
 // ── Dashboard stats (ventas en tiempo real) — delegate a orders-service ───
 app.get('/api/dashboard/stats', async (req, res) => {
     try {
-        const statsRes = await fetch(`${services.orders}/api/orders/stats`);
+        const url = new URL(`${services.orders}/api/orders/stats`);
+        if (req.query.period) url.searchParams.append('period', req.query.period);
+        if (req.query.fecha) url.searchParams.append('fecha', req.query.fecha);
+
+        const statsRes = await fetch(url.toString());
         if (!statsRes.ok) {
             logger.warn('Stats endpoint fallo, fallback a orders list', { status: statsRes.status });
             return res.status(503).json({ error: 'No se pudieron obtener estadísticas' });
@@ -297,6 +315,8 @@ const serviceHealthPaths = {
     orders: `${services.orders}/health`,
     notifications: `${services.notifications}/health`,
     reports: `${services.reports}/api/reports/health`,
+    activity: `${services.activity}/health`,
+    ai: `${services.ai}/health`,
 };
 
 app.get('/health/all', async (_req, res) => {

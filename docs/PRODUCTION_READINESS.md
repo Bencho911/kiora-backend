@@ -38,7 +38,9 @@ Componentes funcionales y utilizables en producción con bajo tráfico, pero que
 *   **Notificaciones (`notifications-service`)**
     *   El encolamiento por Redis Streams es confiable, pero las plantillas actuales de email son muy básicas.
 *   **Pagos (Stripe Webhooks)**
-    *   Implementado y validado de extremo a extremo, pero en fase MVP. Todavía puede añadirse soporte a métodos de pago alternativos (Apple Pay, Google Pay).
+    *   Integración completa: checkout, webhook con `completeOrder` automático, reembolsos.
+    *   El webhook ahora ejecuta `completeOrder()` atómicamente al recibir confirmación de pago (estado → `completada`, factura, outbox inventory + factus), eliminando la necesidad de completar manualmente.
+    *   Pendiente: Apple Pay, Google Pay.
 
 ---
 
@@ -66,12 +68,12 @@ Tras completar las **Fases 0 a 7** de la auditoría arquitectónica, se ha cumpl
 
 ## 🏗️ Estado de la Infraestructura y Cloud
 
-El despliegue ha transicionado a un modelo de control completo mediante **Máquina Virtual (IaaS)** en Microsoft Azure, superando las restricciones de capa gratuita de servicios PaaS o Serverless.
+El sistema se ejecuta localmente mediante Docker Compose.
 
-- **Orquestación:** Un solo nodo con Docker Compose (`Standard_D2s_v3`, 8GB RAM). 
-- **Bases de datos:** Contenedores aislados de PostgreSQL y Redis integrados en la red privada de Docker, reduciendo drásticamente latencias y costos de nube administrada.
+- **Orquestación:** Docker Compose en entorno local.
+- **Bases de datos:** Contenedores aislados de PostgreSQL y Redis integrados en la red privada de Docker.
 - **Migraciones:** Completamente automáticas vía `entrypoint.sh` en el arranque.
 
 ### 🔮 Roadmap de Operaciones (Ops)
-1. **Adquisición de Dominio y Caddy:** Para alcanzar nivel *Enterprise-Grade*, se deberá adquirir un nombre de dominio (DNS) e instalar **Caddy** como *Reverse Proxy* en la VM para delegar la obtención y rotación automática de certificados SSL/HTTPS.
+1. **Adquisición de Dominio y Caddy:** Para alcanzar nivel *Enterprise-Grade* en un futuro despliegue productivo, se deberá adquirir un nombre de dominio (DNS) e instalar **Caddy** como *Reverse Proxy* para delegar la obtención y rotación automática de certificados SSL/HTTPS.
 2. **Rehabilitación de CSP:** Una vez desplegado Caddy con HTTPS nativo, se reactivará `Content-Security-Policy` completo en Helmet dentro del `api-gateway`.

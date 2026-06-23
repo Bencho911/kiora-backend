@@ -56,6 +56,11 @@ const findAll = (limit = 20, offset = 0) =>
 const countAll = () =>
     db.query('SELECT COUNT(*) FROM Cliente WHERE activo = true');
 
+const findAdmins = () =>
+    db.query(
+        `SELECT correo_usu FROM Cliente WHERE activo = true AND rol_usu = 'admin'`
+    );
+
 const create = (nom_usu, correo_usu, hashedPassword, rol_usu, tel_usu) =>
     db.query(
         `INSERT INTO Cliente (nom_usu, correo_usu, password_usu, rol_usu, tel_usu)
@@ -317,4 +322,5 @@ module.exports = {
     updatePassword,
     resetPasswordWithToken,
     resetPasswordWithCode,
+    findAdmins,
 };

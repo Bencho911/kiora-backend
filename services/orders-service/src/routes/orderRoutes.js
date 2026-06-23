@@ -11,6 +11,7 @@ const {
     createOrder,
     updateOrderStatus,
     deleteOrder,
+    checkProductSales,
 } = require('../controllers/orderController');
 
 /**
@@ -69,6 +70,7 @@ router.get('/', getOrders);
  *               $ref: '#/components/schemas/Error'
  */
 router.get('/stats', getStats);
+router.get('/products/:id/has-sales', checkProductSales);
 router.get('/:id', getOrderById);
 
 /**

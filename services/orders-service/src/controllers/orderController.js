@@ -3,6 +3,7 @@
 const orderRepository = require('../repositories/orderRepository');
 const orderService = require('../services/orderService');
 const parsePagination = require('../utils/parsePagination');
+const logActivity = require('../utils/logActivity');
 const logger = require('../config/logger');
 
 /**
@@ -46,14 +47,18 @@ const getOrderById = async (req, res, next) => {
     }
 };
 
-// POST /api/orders
 const createOrder = async (req, res, next) => {
     const { metodopago_usu, items } = req.body;
 
     try {
         const order = await orderService.createOrder({ metodopago_usu, items });
         res.status(201).json(order);
+
+        logActivity({ user_email: req.headers['x-user-email'] || req.user?.correo_usu, action: 'created', entity_type: 'order', entity_id: order.id_vent, details: `Venta #${order.id_vent} creada por $${order.montofinal_vent || 0}` });
     } catch (error) {
+        if (error.status === 403 && error.code === 'BUSINESS_CLOSED') {
+            return res.status(403).json({ error: error.message, code: error.code });
+        }
         logger.error('Error al crear venta', { error: error.message });
         next(error);
     }
@@ -76,6 +81,8 @@ const updateOrderStatus = async (req, res, next) => {
         }
 
         res.status(200).json(result.data);
+
+        logActivity({ user_email: req.user?.correo_usu, action: estado === 'cancelada' ? 'deleted' : 'updated', entity_type: 'order', entity_id: orderId, details: `Venta #${orderId} → estado: ${estado}` });
     } catch (error) {
         logger.error('Error al actualizar estado', { error: error.message });
         next(error);
@@ -101,14 +108,32 @@ const deleteOrder = async (req, res, next) => {
 const getStats = async (req, res, next) => {
     try {
         const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
-        const result = await orderRepository.getStats(fecha);
-        const row = result.rows[0] || { total_ventas: 0, monto_total: 0, ticket_promedio: 0, ultima_venta: null };
+        const period = req.query.period || '7d';
+        const data = await orderRepository.getStats(fecha, period);
+        
+        const calcTrend = (hoy, ayer) => {
+            if (ayer === 0 && hoy > 0) return 100;
+            if (ayer === 0 && hoy === 0) return 0;
+            return ((hoy - ayer) / ayer) * 100;
+        };
+
+        const trendMonto = calcTrend(Number(data.hoy.monto_total), Number(data.ayer.monto_total));
+        const trendTicket = calcTrend(Number(data.hoy.ticket_promedio), Number(data.ayer.ticket_promedio));
+
         res.status(200).json({
             fecha,
-            ventas_hoy: Number(row.total_ventas),
-            monto_total: Number(row.monto_total).toFixed(2),
-            ticket_promedio: Number(row.ticket_promedio).toFixed(2),
-            ultima_venta: row.ultima_venta || null,
+            ventas_hoy: Number(data.hoy.total_ventas),
+            monto_total: Number(data.hoy.monto_total).toFixed(2),
+            ticket_promedio: Number(data.hoy.ticket_promedio).toFixed(2),
+            ultima_venta: data.hoy.ultima_venta || null,
+            ventas_ayer: Number(data.ayer.total_ventas),
+            monto_total_ayer: Number(data.ayer.monto_total).toFixed(2),
+            ticket_promedio_ayer: Number(data.ayer.ticket_promedio).toFixed(2),
+            trend_monto: trendMonto,
+            trend_ticket: trendTicket,
+            pagos_efectivo: data.pagos.pagos_efectivo,
+            pagos_tarjeta: data.pagos.pagos_tarjeta,
+            evolucion_ventas: data.evolucion
         });
     } catch (error) {
         logger.error('Error al obtener stats', { error: error.message });
@@ -116,4 +141,16 @@ const getStats = async (req, res, next) => {
     }
 };
 
-module.exports = { getOrders, getOrderById, getStats, createOrder, updateOrderStatus, deleteOrder };
+// GET /api/orders/products/:id/has-sales
+const checkProductSales = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const exists = await orderRepository.checkProductInSales(id);
+        res.status(200).json({ hasSales: exists });
+    } catch (error) {
+        logger.error('Error al verificar ventas de producto', { error: error.message });
+        next(error);
+    }
+};
+
+module.exports = { getOrders, getOrderById, getStats, createOrder, updateOrderStatus, deleteOrder, checkProductSales };

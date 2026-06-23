@@ -6,6 +6,7 @@ const blacklist = require('../config/blacklist');
 const { addToBlacklist } = require('../middleware/authMiddleware');
 const emailService = require('../config/emailService');
 const { client: redisClient } = require('../config/blacklist');
+const logActivity = require('../utils/logActivity');
 const logger = require('../config/logger');
 
 const NOTIFICATIONS_STREAM = process.env.REDIS_NOTIFICATIONS_STREAM || 'kiora:notifications:stream';
@@ -37,6 +38,8 @@ const register = async (req, res, next) => {
             message: 'Usuario registrado exitosamente.',
             id_usu: result.rows[0].id_usu
         });
+
+        logActivity({ user_email: correo_usu, action: 'created', entity_type: 'user', entity_id: result.rows[0].id_usu, details: `Usuario "${nom_usu}" registrado con rol ${rol_usu || 'cliente'}` });
     } catch (error) {
         if (error.code === '23505') {
             return res.status(409).json({ error: 'El correo ya está registrado.' });
@@ -105,10 +108,12 @@ const login = async (req, res, next) => {
 
         if (isWebClient) {
             res.cookie('token', token, authService.cookieOptions(authService.ACCESS_COOKIE_MAX_AGE));
-            return res.status(200).json({ message: 'Login exitoso.', usuario: usuarioPublico });
+            res.status(200).json({ message: 'Login exitoso.', usuario: usuarioPublico });
+        } else {
+            res.status(200).json({ message: 'Login exitoso.', token, usuario: usuarioPublico });
         }
 
-        res.status(200).json({ message: 'Login exitoso.', token, usuario: usuarioPublico });
+        logActivity({ user_email: correo_usu, action: 'login', entity_type: 'user', entity_id: usuario.id_usu, details: `Inicio de sesión — ${correo_usu}` });
     } catch (error) {
         logger.error('Error al iniciar sesión', { error: error.message });
         next(error);
@@ -220,6 +225,8 @@ const unlockUser = async (req, res, next) => {
 
         logger.info('Usuario desbloqueado', { id_usu: id });
         res.status(200).json({ message: 'Usuario desbloqueado exitosamente.', usuario: result.rows[0] });
+
+        logActivity({ user_email: req.usuario?.correo_usu, action: 'updated', entity_type: 'user', entity_id: id, details: `Usuario #${id} desbloqueado por ${req.usuario?.correo_usu}` });
     } catch (error) {
         logger.error('Error al desbloquear usuario', { error: error.message });
         next(error);
@@ -343,8 +350,8 @@ const forgotPassword = async (req, res, next) => {
     try {
         const result = await userRepository.findByEmail(correo_usu);
 
-        // Siempre responder 200 para no revelar si el correo existe (user enumeration)
         if (result.rows.length === 0) {
+            // Retorna 200 siempre para prevenir enumeración de usuarios
             return res.status(200).json({
                 message: 'Si el correo está registrado, recibirás un codigo de recuperacion.'
             });
@@ -485,8 +492,22 @@ const blockUser = async (req, res, next) => {
         }
         logger.info('Usuario bloqueado', { id_usu: id, bloqueado_por: req.usuario?.id_usu });
         res.status(200).json({ message: 'Usuario bloqueado exitosamente.' });
+
+        logActivity({ user_email: req.usuario?.correo_usu, action: 'blocked', entity_type: 'user', entity_id: id, details: `Usuario #${id} bloqueado por ${req.usuario?.correo_usu}` });
     } catch (error) {
         logger.error('Error al bloquear usuario', { error: error.message });
+        next(error);
+    }
+};
+
+// GET /api/users/admins — devuelve correos de todos los admins (para notificaciones)
+const getAdminEmails = async (_req, res, next) => {
+    try {
+        const result = await userRepository.findAdmins();
+        const emails = result.rows.map(r => r.correo_usu);
+        res.status(200).json({ emails });
+    } catch (error) {
+        logger.error('Error al obtener admins', { error: error.message });
         next(error);
     }
 };
@@ -508,4 +529,5 @@ module.exports = {
     resetPassword,
     changePassword,
     adminResetPassword,
+    getAdminEmails,
 };

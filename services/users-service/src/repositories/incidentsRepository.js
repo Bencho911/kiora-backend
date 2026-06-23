@@ -9,5 +9,6 @@ const create = ({ descripcion, prioridad, estado, fk_id_usu, cod_prod, observaci
               [descripcion, prioridad || 'media', estado || 'pendiente', fk_id_usu, cod_prod || null, observaciones_tecnicas || null, titulo || null]);
 
 const updateStatus = (id, estado) => db.query('UPDATE ReporteFallo SET estado = $1 WHERE id_rep = $2 RETURNING *', [estado, id]);
+const remove = (id) => db.query('DELETE FROM ReporteFallo WHERE id_rep = $1 RETURNING *', [id]);
 
-module.exports = { findAll, findById, create, updateStatus };
+module.exports = { findAll, findById, create, updateStatus, remove };

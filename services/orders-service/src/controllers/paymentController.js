@@ -1,8 +1,8 @@
 'use strict';
 
 const stripeService = require('../services/stripeService');
-const { findByIdWithItems } = require('../repositories/orderRepository');
-const db = require('../config/db');
+const orderService = require('../services/orderService');
+const orderRepository = require('../repositories/orderRepository');
 const logger = require('../config/logger');
 const { outgoingHeaders, fetchWithRetry, DEFAULT_TIMEOUT_MS } = require('../utils/httpClient');
 
@@ -11,7 +11,7 @@ const generateCheckoutParams = async (req, res) => {
     const { success_url, cancel_url } = req.body || {};
 
     try {
-        const orden = await findByIdWithItems(id);
+        const orden = await orderRepository.findByIdWithItems(id);
         if (!orden) {
             return res.status(404).json({ error: 'Orden no encontrada.' });
         }
@@ -24,26 +24,48 @@ const generateCheckoutParams = async (req, res) => {
         // Se mantiene síncrona intencionalmente: es mejor decirle al cliente
         // "no hay stock" ANTES de cobrarle, que cobrar y reembolsar después.
         const headers = outgoingHeaders(req.headers);
-        const reserveRes = await fetchWithRetry(
-            process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve',
-            {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ orderId: orden.id_vent, items: orden.items }),
-            },
-            {
-                maxRetries: 1,
-                timeoutMs: DEFAULT_TIMEOUT_MS,
-                onNonRetryable: (status) => status >= 400 && status < 500,
-            }
-        );
+        let reserveRes;
+        try {
+            reserveRes = await fetchWithRetry(
+                process.env.INVENTORY_SERVICE_URL + '/api/inventory/saga/reserve',
+                {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ orderId: orden.id_vent, items: orden.items }),
+                },
+                {
+                    maxRetries: 1,
+                    timeoutMs: DEFAULT_TIMEOUT_MS,
+                    onNonRetryable: (status) => status >= 400 && status < 500,
+                }
+            );
+        } catch (inventoryErr) {
+            logger.error('Error de conectividad con inventory-service al reservar', {
+                orderId: id, error: inventoryErr.message, code: inventoryErr.code,
+            });
+            return res.status(503).json({
+                error: 'No se pudo validar el inventario. Intenta de nuevo en unos segundos.',
+                detail: inventoryErr.message,
+            });
+        }
 
         if (!reserveRes.ok) {
             const errData = await reserveRes.json().catch(() => ({}));
             return res.status(409).json({ error: errData.error || 'Agotado o fallo reservando inventario temporalmente' });
         }
 
-        const url = await stripeService.createCheckoutSession(orden, orden.items, success_url, cancel_url);
+        let url;
+        try {
+            url = await stripeService.createCheckoutSession(orden, orden.items, success_url, cancel_url);
+        } catch (stripeErr) {
+            logger.error('Error creando sesión Stripe Checkout', {
+                orderId: id, error: stripeErr.message, type: stripeErr.type,
+            });
+            return res.status(502).json({
+                error: 'Error al generar el enlace de pago con Stripe.',
+                detail: stripeErr.message,
+            });
+        }
 
         res.status(200).json({
             status: 'ok',
@@ -52,7 +74,7 @@ const generateCheckoutParams = async (req, res) => {
 
     } catch (error) {
         logger.error('Error generando link de pago Checkout', { error: error.message, stack: error.stack });
-        res.status(500).json({ error: 'Error interno generando link de pago.' });
+        res.status(500).json({ error: 'Error interno generando link de pago.', detail: error.message });
     }
 };
 
@@ -74,34 +96,29 @@ const handleStripeWebhook = async (req, res) => {
 
         logger.info('Stripe Webhook: Orden #' + orderId + ' Pagada con Éxito', { paymentIntent });
 
-        // ── Transacción atómica: estado + stripe_payment_id + outbox event ──
-        // La llamada a inventory-service se delega al Outbox Poller para evitar
-        // inconsistencias (HTTP síncrono dentro de una transacción BD).
-        const client = await db.connect();
         try {
-            await client.query('BEGIN');
+            // ── Completar la orden con toda la lógica transaccional ──
+            // Se usa completeOrder() que en una sola transacción atómica:
+            //   a) Cambia estado a 'completada' (+ stripe_payment_id)
+            //   b) Crea la factura
+            //   c) Inserta eventos outbox de movimiento de inventario (salida) por cada ítem
+            //   d) Inserta evento outbox para facturación electrónica (Factus/DIAN)
+            //   e) Envía broadcast WebSocket al dashboard (fuera de la transacción)
+            // stripePaymentId se pasa para guardarlo dentro de la misma transacción,
+            // evitando que quede una orden completada sin ID de pago para reembolsos.
+            const result = await orderService.completeOrder(orderId, req.headers, paymentIntent);
 
-            // 1. Actualizar estado y guardar stripe_payment_id para futuros reembolsos
-            await client.query(
-                'UPDATE Ventas SET estado = $1, metodopago_usu = $2, stripe_payment_id = $3 WHERE id_vent = $4',
-                ['pagado', 'stripe_tarjeta', paymentIntent, orderId]
-            );
-
-            // 2. Insertar evento outbox: el poller confirmará la reserva contra inventory-service
-            await client.query(
-                `INSERT INTO outbox_events (event_type, payload) VALUES ($1, $2)`,
-                ['inventory.reserve.commit', JSON.stringify({ orderId })]
-            );
-            logger.info('Evento outbox inventory.reserve.commit encolado', { orderId });
-
-            await client.query('COMMIT');
-            logger.info('Transacción webhook completada', { orderId });
-        } catch (dbError) {
-            await client.query('ROLLBACK');
-            logger.error('Error en transacción Webhook Stripe:', { dbError: dbError.message, orderId });
-            return res.status(500).json({ error: 'Error interno al procesar el pago.' });
-        } finally {
-            client.release();
+            if (!result.ok) {
+                logger.error('Error completando orden desde webhook Stripe', {
+                    orderId, error: result.error, code: result.code,
+                });
+                return res.status(result.status || 500).json({ error: result.error || 'Error completando la orden.' });
+            }
+        } catch (err) {
+            logger.error('Error CRÍTICO en webhook Stripe — excepción no capturada en completeOrder', {
+                orderId, error: err.message, stack: err.stack,
+            });
+            return res.status(500).json({ error: 'Error interno procesando el webhook.' });
         }
     }
 

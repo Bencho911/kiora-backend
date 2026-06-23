@@ -64,9 +64,12 @@ app.get('/api/users/ready', async (req, res) => {
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/users/docs-json', (req, res) => res.json(swaggerSpec));
 
+const settingsRoutes = require('./routes/settingsRoutes');
+
 // ── Rutas ──────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/incidents', incidentsRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // ── Manejo centralizado de errores (SIEMPRE al final) ──────────────────────
 app.use(errorHandler);

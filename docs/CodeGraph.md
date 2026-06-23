@@ -4,28 +4,54 @@ tags: [graphify, architecture, codebase]
 ---
 [[Home]] > **Code Graph**
 
-# Knowledge Graph del Código (Graphify)
+# Knowledge Graph del Código
 
-Este documento es un *placeholder* interactivo diseñado para almacenar la salida de la CLI de **Graphify**.
+*Última ejecución:* 2026-05-16 23:30 UTC
 
-> **Info:** Graphify parsea el código fuente de los microservicios (`services/`) para extraer las relaciones estructurales, APIs, clases e imports, reduciendo el costo de tokens cuando los asistentes de IA interactúan con este repositorio.
+## Mapa de Servicios
 
-## Resultados del Último Análisis
+```
+                    ┌──────────────────┐
+                    │   API Gateway     │ (:3000)
+                    └────────┬─────────┘
+         ┌───────────────────┼───────────────────┐
+         │        │         │         │         │
+         ▼        ▼         ▼         ▼         ▼
+   ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+   │ Users  │ │Products│ │Inventory│ │ Orders │ │Reports │
+   │:3001   │ │:3002   │ │:3003   │ │:3004   │ │:3006   │
+   └────────┘ └────────┘ └────────┘ └────────┘ └────────┘
+                                                   ▲
+   ┌──────────────┐                               │
+   │Notifications │(:3005) ────────────────────────┘
+   └──────────────┘  (Redis Streams)
+```
 
-*Última ejecución:* `EOF`
+## Dependencias entre Servicios
 
-date >> $REPORT_FILE
+| Servicio | Depende de | Propósito |
+|----------|-----------|-----------|
+| `api-gateway` | users, products, inventory, orders, notifications, reports | Enruta tráfico, auth centralizado, rate-limiting |
+| `orders-service` | inventory (`saga/reserve`), reports (broadcast) | Valida stock antes de cobrar, outbox events |
+| `inventory-service` | products | Consulta productos para movimientos |
+| `reports-service` | orders | Genera reportes desde datos de órdenes |
+| `notifications-service` | — (Redis Streams) | Escucha eventos via pub/sub |
 
-cat << 'EOF' >> $REPORT_FILE
-`
+## Stack Tecnológico
 
-### Resumen de Microservicios:
-- **api-gateway:** Enruta tráfico a puertos 3001-3006.
-- **users-service:** JWT y Autenticación.
-- **products-service:** Catálogo.
-- **inventory-service:** Inventario y movimientos.
-- **orders-service:** Facturas y pagos.
-- **notifications-service:** Consumer groups (Redis).
-- **reports-service:** PDF Streams.
+- **Runtime:** Node.js 20 (Express.js)
+- **Base de datos:** PostgreSQL por servicio + Redis (sesiones, caché, rate-limit)
+- **Mensajería:** Outbox pattern (tabla `outbox_events`) + Redis Streams
+- **Observabilidad:** OpenTelemetry (Jaeger), Prometheus, Grafana
+- **Facturación:** Stripe (pagos), Factus/DIAN (facturación electrónica)
+- **Frontend:** Astro + React (TypeScript), Nginx, PWA
+- **Infra:** Docker Compose local
 
-> Para actualizar este grafo real, ejecuta `./scripts/generate_graph.sh`
+## Archivos de la Bóveda
+
+- [[Home]] — Inicio
+- [[INTER_SERVICE_CONTRACTS]] — Contratos HTTP entre servicios
+- [[DEGRADATION_MATRIX]] — Degradación y fallos
+- [[PRODUCTION_READINESS]] — Estado producción
+- [[Arquitectura_Datos]] — Modelo de datos (ERD)
+- [[SECRETS_INVENTORY]] — Variables de entorno

@@ -64,6 +64,14 @@ CREATE TABLE ReporteFallo (
     titulo                TEXT NULL
 );
 
+CREATE TABLE ajustes_sistema (
+    id SERIAL PRIMARY KEY,
+    cierre_caja_automatico BOOLEAN NOT NULL DEFAULT true,
+    hora_cierre_automatico VARCHAR(5) NOT NULL DEFAULT '03:00',
+    metodo_descuento_lote VARCHAR(10) NOT NULL DEFAULT 'FEFO',
+    dias_alerta_vencimiento INT NOT NULL DEFAULT 30
+);
+
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- DOMINIO: products-service (kiora_products)
@@ -81,12 +89,14 @@ CREATE TABLE Producto (
     nom_prod        VARCHAR(100)   NOT NULL,
     descrip_prod    TEXT,
     precio_unitario DECIMAL(10, 2) NOT NULL CHECK (precio_unitario >= 0),
+    descuento       DECIMAL(5, 2) DEFAULT 0,
     fechaven_prod   DATE,
     -- Array de categorías (un producto puede estar en varias)
     fk_cod_cats     INTEGER[] DEFAULT '{}',
     stock_actual    INTEGER NOT NULL DEFAULT 0,
     stock_minimo    INTEGER NOT NULL DEFAULT 0,
     url_imagen      VARCHAR(500),
+    codigo_barras   VARCHAR(50) DEFAULT NULL,
     activo          BOOLEAN NOT NULL DEFAULT true,
     CONSTRAINT chk_stock_actual_no_negativo CHECK (stock_actual >= 0)
 );
@@ -137,10 +147,42 @@ CREATE TABLE Suministra (
 
 CREATE INDEX IF NOT EXISTS idx_suministra_cod_prod ON Suministra(cod_prod);
 
+CREATE TABLE lotes (
+    id SERIAL PRIMARY KEY,
+    cod_prod INT NOT NULL,
+    numero_lote VARCHAR(50) NOT NULL,
+    fecha_vencimiento DATE,
+    cantidad_inicial DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    cantidad_actual DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    fecha_ingreso TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    estado VARCHAR(20) DEFAULT 'ACTIVO' -- ACTIVO, AGOTADO, VENCIDO
+);
+
+CREATE INDEX IF NOT EXISTS idx_lotes_prod_vencimiento ON lotes(cod_prod, fecha_vencimiento ASC) WHERE estado = 'ACTIVO';
+
+CREATE TABLE movimientos_lote (
+    id SERIAL PRIMARY KEY,
+    lote_id INT NOT NULL REFERENCES lotes(id) ON DELETE CASCADE,
+    tipo_mov VARCHAR(20) NOT NULL, -- 'entrada', 'salida'
+    cantidad DECIMAL(10, 2) NOT NULL,
+    fecha_mov TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fk_id_vent INT, -- Nullable, referencia débil a Ventas (órdenes)
+    desc_mov TEXT
+);
+
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- DOMINIO: orders-service (kiora_orders)
 -- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE sesion_caja (
+    id SERIAL PRIMARY KEY,
+    hora_apertura TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    hora_cierre TIMESTAMP,
+    estado VARCHAR(20) NOT NULL DEFAULT 'ABIERTA',
+    total_ventas DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    usuario_id INT -- ID del administrador que abrió/cerró la caja (users-service)
+);
 
 CREATE TABLE Ventas (
     id_vent           SERIAL PRIMARY KEY,
@@ -149,7 +191,8 @@ CREATE TABLE Ventas (
     montofinal_vent   DECIMAL(10, 2) NOT NULL CHECK (montofinal_vent >= 0),
     metodopago_usu    VARCHAR(50),
     estado            VARCHAR(30) NOT NULL DEFAULT 'pendiente',
-    stripe_payment_id VARCHAR(100)              -- ID de pago Stripe para reembolsos
+    stripe_payment_id VARCHAR(100),             -- ID de pago Stripe para reembolsos
+    sesion_id         INT REFERENCES sesion_caja(id) ON DELETE SET NULL
     -- 'pendiente' | 'pagado' | 'completada' | 'cancelada' | 'reembolsada'
 );
 
@@ -159,19 +202,25 @@ CREATE TABLE Producto_Venta (
     cod_prod    INT NOT NULL,                   -- → products-service.Producto (sin FK)
     cantidad    INT NOT NULL CHECK (cantidad > 0),
     precio_unit DECIMAL(10, 2) NOT NULL CHECK (precio_unit >= 0),
-    nom_prod    VARCHAR(255)                    -- Desnormalizado para historial
+    nom_prod    VARCHAR(255),                   -- Desnormalizado para historial
+    tax_status  VARCHAR(10) DEFAULT '19'
 );
 
 CREATE INDEX IF NOT EXISTS idx_producto_venta_fk_id_vent ON Producto_Venta(fk_id_vent);
 
 CREATE TABLE Factura (
-    id              SERIAL PRIMARY KEY,
-    fk_id_vent      INT NOT NULL REFERENCES Ventas(id_vent) ON DELETE CASCADE,
-    id_usu          INT NOT NULL,               -- → users-service.Cliente (sin FK)
-    cantidad_vent   INT NOT NULL CHECK (cantidad_vent > 0),
-    precio_prod     DECIMAL(10, 2) NOT NULL CHECK (precio_prod >= 0),
-    montototal_vent DECIMAL(10, 2) NOT NULL CHECK (montototal_vent >= 0),
-    emitida_en      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id                    SERIAL PRIMARY KEY,
+    fk_id_vent            INT NOT NULL REFERENCES Ventas(id_vent) ON DELETE CASCADE,
+    id_usu                INT NOT NULL,               -- → users-service.Cliente (sin FK)
+    cantidad_vent         INT NOT NULL CHECK (cantidad_vent > 0),
+    precio_prod           DECIMAL(10, 2) NOT NULL CHECK (precio_prod >= 0),
+    montototal_vent       DECIMAL(10, 2) NOT NULL CHECK (montototal_vent >= 0),
+    emitida_en            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    factus_invoice_number VARCHAR(50),
+    factus_cufe           VARCHAR(120),
+    factus_public_url     TEXT,
+    factus_qr_link        TEXT,
+    factus_status         VARCHAR(20) DEFAULT 'pending'
 );
 
 CREATE INDEX IF NOT EXISTS idx_factura_fk_id_vent ON Factura(fk_id_vent);
@@ -200,7 +249,7 @@ CREATE INDEX IF NOT EXISTS idx_outbox_pending
 -- DOMINIO: notifications-service (kiora_notifications)
 -- ─────────────────────────────────────────────────────────────────────────────
 
-CREATE TABLE IF NOT EXISTS alertas (
+CREATE TABLE IF NOT EXISTS Alerta (
     id         SERIAL PRIMARY KEY,
     tipo       VARCHAR(20) NOT NULL DEFAULT 'general',   -- 'stock_bajo' | 'vencimiento' | 'general'
     mensaje    TEXT NOT NULL,
@@ -208,3 +257,23 @@ CREATE TABLE IF NOT EXISTS alertas (
     leida      BOOLEAN NOT NULL DEFAULT false,
     creada_en  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- DOMINIO: activity-service (kiora_activity)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS activity_log (
+    id SERIAL PRIMARY KEY,
+    user_email VARCHAR(255) NOT NULL,
+    user_name VARCHAR(255),
+    action VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(100) NOT NULL,
+    entity_id VARCHAR(50),
+    details TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_log_user_email ON activity_log(user_email);
+CREATE INDEX IF NOT EXISTS idx_activity_log_entity ON activity_log(entity_type, entity_id);

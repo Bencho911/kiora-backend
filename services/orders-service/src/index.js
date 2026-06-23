@@ -16,6 +16,10 @@ const server = app.listen(env.port, () => {
 
     // Iniciar el poller del Outbox Pattern
     startPoller();
+
+    // Iniciar cron jobs (Cierre de caja automático)
+    const { startCronJobs } = require('./jobs/cronJobs');
+    startCronJobs();
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────

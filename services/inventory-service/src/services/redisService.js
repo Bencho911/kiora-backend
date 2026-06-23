@@ -58,15 +58,41 @@ const getReservedQuantityForProduct = async (cod_prod) => {
 };
 
 /**
+ * Obtiene los correos de todos los administradores desde users-service
+ */
+const getAdminEmails = async () => {
+    const baseUrl = process.env.USERS_SERVICE_URL || 'http://users-service:3001';
+    try {
+        const res = await fetch(`${baseUrl}/api/auth/users/admins`, {
+            signal: AbortSignal.timeout(5000),
+            headers: {
+                'x-internal-secret': process.env.INTERNAL_SECRET || 'kiora_internal_2024'
+            }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return data.emails || [];
+    } catch (err) {
+        logger.warn('No se pudieron obtener correos de administradores (Redis)', { error: err.message });
+        return [];
+    }
+};
+
+/**
  * Dispara un evento asíncrono al sistema de notificaciones vía Streams
- * @param {Object} productData 
+ * @param {Object} productData
  */
 const emitLowStockAlert = async (productData) => {
     if (!redisClient) return;
     try {
         const streamKey = 'kiora:notifications:stream';
+        const adminEmails = await getAdminEmails();
+        const to = adminEmails.length > 0
+            ? adminEmails.join(', ')
+            : process.env.ALERT_EMAIL || 'admin@kiora.com';
+
         const payload = JSON.stringify({
-            to: process.env.ADMIN_EMAIL || 'admin@kiora.com',
+            to,
             subject: '⚠️ Alerta: Stock Bajo Detectado en Kiosco',
             html: `
                 <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f0eb; padding: 40px 20px; color: #333333;">

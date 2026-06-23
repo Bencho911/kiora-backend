@@ -23,20 +23,27 @@ function getStripe() {
  * @param {Array} items Lista de items comprados para mostrar en Stripe
  * @returns {Promise<string>} La URL generada para pagar
  */
+const STRIPE_MIN_AMOUNT = 1000; // Stripe requiere mínimo ~1000 por línea
+
 const createCheckoutSession = async (order, items, successUrl = null, cancelUrl = null) => {
     try {
         const session = await getStripe().checkout.sessions.create({
             payment_method_types: ['card'],
-            line_items: items.map((item) => ({
-                price_data: {
-                    currency: 'cop',
-                    product_data: {
-                        name: item.nom_prod || ('Producto #' + item.cod_prod),
+            line_items: items.map((item) => {
+                const rawAmount = Math.round(Number(item.precio_unit));
+                return {
+                    price_data: {
+                        currency: 'cop',
+                        product_data: {
+                            name: item.nom_prod || ('Producto #' + item.cod_prod),
+                        },
+                        // Stripe interpreta COP con 2 decimales (ej. 1000 = $10.00 COP).
+                        // Se multiplica por 100 para enviar el valor correcto.
+                        unit_amount: Math.max(rawAmount, STRIPE_MIN_AMOUNT) * 100,
                     },
-                    unit_amount: Math.round(item.precio_unit * 100), // Stripe usa centavos
-                },
-                quantity: item.cantidad,
-            })),
+                    quantity: item.cantidad,
+                };
+            }),
             mode: 'payment',
             success_url: successUrl || 'http://localhost:5173/payment-success?order_id=' + order.id_vent,
             cancel_url: cancelUrl || 'http://localhost:5173/payment-cancel?order_id=' + order.id_vent,

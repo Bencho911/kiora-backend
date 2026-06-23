@@ -14,8 +14,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_users
-    ports:
-      - "5433:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -34,8 +32,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_products
-    ports:
-      - "5434:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -54,8 +50,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_inventory
-    ports:
-      - "5435:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -74,8 +68,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_notifications
-    ports:
-      - "5437:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -94,8 +86,6 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
       POSTGRES_DB: kiora_orders
-    ports:
-      - "5436:5432"
     networks:
       - kiora-backend-net
     volumes:
@@ -115,8 +105,6 @@ services:
     image: redis:7-alpine
     container_name: kiora_redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     networks:
       - kiora-backend-net
     volumes:
@@ -169,13 +157,33 @@ services:
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       REDIS_HOST: kiora-redis
+      USERS_SERVICE_URL: http://users-service:3001
+      PRODUCTS_SERVICE_URL: http://products-service:3002
+      INVENTORY_SERVICE_URL: http://inventory-service:3003
+      ORDERS_SERVICE_URL: http://orders-service:3004
+      NOTIFICATIONS_SERVICE_URL: http://notifications-service:3005
+      REPORTS_SERVICE_URL: http://reports-service:3006
+      ACTIVITY_SERVICE_URL: http://activity-service:3007
+      AI_SERVICE_URL: http://ai-service:3008
     depends_on:
-      - users-service
-      - products-service
-      - inventory-service
-      - orders-service
-      - notifications-service
-      - reports-service
+      kiora-redis:
+        condition: service_healthy
+      users-service:
+        condition: service_started
+      products-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      orders-service:
+        condition: service_started
+      notifications-service:
+        condition: service_started
+      reports-service:
+        condition: service_started
+      activity-service:
+        condition: service_started
+      ai-service:
+        condition: service_started
 
   users-service:
     build:
@@ -183,8 +191,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_users_service
     restart: unless-stopped
-    ports:
-      - "3001:3001"
     networks:
       - kiora-backend-net
     env_file:
@@ -200,6 +206,7 @@ services:
       REDIS_PORT: 6379
       OTEL_SERVICE_NAME: users-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       users-db:
         condition: service_healthy
@@ -212,8 +219,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_products_service
     restart: unless-stopped
-    ports:
-      - "3002:3002"
     networks:
       - kiora-backend-net
     env_file:
@@ -228,6 +233,9 @@ services:
       REDIS_HOST: kiora-redis
       OTEL_SERVICE_NAME: products-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      TZ: ${TZ:-America/Bogota}
+    volumes:
+      - products_uploads:/app/src/public/uploads
     depends_on:
       products-db:
         condition: service_healthy
@@ -238,8 +246,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_inventory_service
     restart: unless-stopped
-    ports:
-      - "3003:3003"
     networks:
       - kiora-backend-net
     env_file:
@@ -255,8 +261,10 @@ services:
       REDIS_PORT: 6379
       ADMIN_EMAIL: ruben.camilo321@gmail.com
       PRODUCTS_SERVICE_URL: http://products-service:3002
+      USERS_SERVICE_URL: http://users-service:3001
       OTEL_SERVICE_NAME: inventory-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       inventory-db:
         condition: service_healthy
@@ -267,8 +275,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_orders_service
     restart: unless-stopped
-    ports:
-      - "3004:3004"
     networks:
       - kiora-backend-net
     env_file:
@@ -283,6 +289,7 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:3003
       OTEL_SERVICE_NAME: orders-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       orders-db:
         condition: service_healthy
@@ -293,8 +300,6 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_notifications_service
     restart: unless-stopped
-    ports:
-      - "3005:3005"
     networks:
       - kiora-backend-net
     env_file:
@@ -308,6 +313,7 @@ services:
       DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@notifications-db:5432/kiora_notifications
       REDIS_HOST: kiora-redis
       REDIS_PORT: 6379
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       notifications-db:
         condition: service_healthy
@@ -320,12 +326,12 @@ services:
       dockerfile: Dockerfile
     container_name: kiora_reports_service
     restart: unless-stopped
-    ports:
-      - "3006:3006"
     networks:
       - kiora-backend-net
     env_file:
       - ./services/reports-service/.env.docker
+    environment:
+      TZ: ${TZ:-America/Bogota}
     depends_on:
       - orders-service
 
@@ -382,11 +388,78 @@ services:
       - prometheus
       - jaeger
 
+  telegram-bot:
+    build:
+      context: ./services/telegram-bot
+      dockerfile: Dockerfile
+    container_name: kiora_telegram_bot
+    restart: unless-stopped
+    networks:
+      - kiora-backend-net
+    env_file:
+      - ./services/telegram-bot/.env.docker
+    environment:
+      REDIS_HOST: kiora-redis
+      REDIS_PORT: 6379
+      API_GATEWAY_URL: http://api-gateway:3000/api
+      TZ: ${TZ:-America/Bogota}
+    depends_on:
+      kiora-redis:
+        condition: service_healthy
+
+  activity-db:
+    image: postgres:16-alpine
+    container_name: kiora_activity_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      POSTGRES_DB: kiora_activity
+    networks:
+      - kiora-backend-net
+    volumes:
+      - activity_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_activity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build:
+      context: ./services/ai-service
+      dockerfile: Dockerfile
+    container_name: kiora_ai_service
+    restart: unless-stopped
+    networks:
+      - kiora-backend-net
+    env_file:
+      - ./services/ai-service/.env.docker
+    environment:
+      API_GATEWAY_URL: http://api-gateway:3000/api
+      TZ: ${TZ:-America/Bogota}
+
+  activity-service:
+    build:
+      context: ./services/activity-service
+      dockerfile: Dockerfile
+    container_name: kiora_activity_service
+    restart: unless-stopped
+    networks:
+      - kiora-backend-net
+    env_file:
+      - ./services/activity-service/.env.docker
+    environment:
+      DB_HOST: activity-db
+      DB_PORT: 5432
+      TZ: ${TZ:-America/Bogota}
+    depends_on:
+      activity-db:
+        condition: service_healthy
 
 networks:
   kiora-public-net:
-    name: kiora-public-net
-    driver: bridge
+    external: true
   kiora-backend-net:
     name: kiora-backend-net
     driver: bridge
@@ -394,9 +467,11 @@ networks:
 volumes:
   users_db_data:
   products_db_data:
+  products_uploads:
   inventory_db_data:
   orders_db_data:
   notifications_db_data:
+  activity_db_data:
   redis_data:
   pgadmin_data:
   prometheus_data:

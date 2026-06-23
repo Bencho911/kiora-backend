@@ -26,3 +26,5 @@ Bienvenido a la bóveda de conocimiento de **Kiora Backend**. Este espacio conec
 ---
 
 > **Tip para Obsidian:** Abre el **Graph View** (`Ctrl+G` o `Cmd+G`) para visualizar cómo estos componentes se conectan entre sí.
+>
+> *Última actualización: 2026-05-16*

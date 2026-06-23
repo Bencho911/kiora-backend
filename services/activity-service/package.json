@@ -1,0 +1,17 @@
+{
+  "name": "activity-service",
+  "version": "1.0.0",
+  "description": "Activity logging microservice for Kiora",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "migrate:up": "node src/migrations/run.js up",
+    "migrate:up:docker": "node src/migrations/run.js up"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "pg": "^8.13.0"
+  }
+}
