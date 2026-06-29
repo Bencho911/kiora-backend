@@ -122,6 +122,16 @@ const updateStock = async (cod_prod, delta, fk_cod_prov = null, fecha_vencimient
         if (delta > 0) {
             // ENTRADA de inventario
             const numeroLote = `LOTE-${Date.now()}`;
+
+            // Check for duplicate batch name within the same product
+            const existingLote = await client.query(
+                `SELECT id FROM lotes WHERE cod_prod = $1 AND LOWER(TRIM(numero_lote)) = LOWER(TRIM($2)) AND estado = 'ACTIVO'`,
+                [cod_prod, numeroLote]
+            );
+            if (existingLote.rows.length > 0) {
+                throw new Error(`Ya existe un lote activo con el nombre "${numeroLote}" para este producto.`);
+            }
+
             const resLote = await client.query(
                 `INSERT INTO lotes (cod_prod, numero_lote, fecha_vencimiento, cantidad_inicial, cantidad_actual)
                  VALUES ($1, $2, $3, $4, $4) RETURNING *`,
@@ -325,6 +335,16 @@ const getAlerts = async () => {
     };
 };
 
+/**
+ * Check if a lote with the given name already exists for a product (case-insensitive)
+ */
+const findLoteByName = (cod_prod, numero_lote) =>
+    db.query(
+        `SELECT id, numero_lote, estado FROM lotes 
+         WHERE cod_prod = $1 AND LOWER(TRIM(numero_lote)) = LOWER(TRIM($2)) AND estado = 'ACTIVO'`,
+        [cod_prod, numero_lote]
+    );
+
 module.exports = {
     findAllSuppliers,
     countAllSuppliers,
@@ -346,5 +366,6 @@ module.exports = {
     getAlerts,
     findSupplierByIdProv,
     findLotesByProduct,
+    findLoteByName,
     deleteLote,
 };
