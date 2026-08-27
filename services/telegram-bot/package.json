@@ -4,7 +4,11 @@
   "description": "Bot de Telegram para notificaciones de Kiora",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "echo 'No tests'",
+    "test:migrations": "echo 'No migration tests'",
+    "lint": "echo 'No linting configured'",
+    "audit:ci": "npm audit --audit-level=high"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

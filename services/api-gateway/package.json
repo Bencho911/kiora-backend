@@ -8,6 +8,7 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
     "test": "jest --runInBand",
+    "test:migrations": "echo 'No migration tests'",
     "lint": "eslint src --ext .ts,.js --max-warnings 0",
     "lint:fix": "eslint src --ext .ts,.js --fix --max-warnings 0",
     "audit:ci": "npm audit --audit-level=high"
