@@ -36,7 +36,7 @@ describe('orders-service (smoke)', () => {
         db.query
             .mockResolvedValueOnce({ rows: [{ id_vent: 1, estado: 'pendiente' }] })
             .mockResolvedValueOnce({ rows: [{ count: '1' }] });
-        const res = await request(app).get('/api/orders');
+        const res = await request(app).get('/api/orders').set('x-user-role', 'admin');
         expect(res.status).toBe(200);
         expect(res.body.data).toHaveLength(1);
     });

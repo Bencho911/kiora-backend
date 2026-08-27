@@ -49,35 +49,53 @@ const removeSupplier = (id) =>
 
 /* ── Movimientos (Historial) ─────────────────────────────────────────────── */
 
-const findAllMovements = ({ cod_prod = null, storeId = null, limit = 20, offset = 0 } = {}) => {
-    if (cod_prod && storeId) {
-        return db.query(
-            'SELECT * FROM Inventario WHERE cod_prod = $1 AND store_id = $2 ORDER BY fecha_mov DESC, id_mov DESC LIMIT $3 OFFSET $4',
-            [cod_prod, storeId, limit, offset]
-        );
-    }
+const findAllMovements = ({ cod_prod = null, storeId = null, allowedStores = 'ALL', limit = 20, offset = 0 } = {}) => {
+    if (allowedStores !== 'ALL' && allowedStores.length === 0) return Promise.resolve({ rows: [] });
+
+    let query = 'SELECT * FROM Inventario WHERE 1=1';
+    const params: any[] = [];
+    let pCount = 1;
+
     if (cod_prod) {
-        return db.query(
-            'SELECT * FROM Inventario WHERE cod_prod = $1 ORDER BY fecha_mov DESC, id_mov DESC LIMIT $2 OFFSET $3',
-            [cod_prod, limit, offset]
-        );
+        query += ` AND cod_prod = $${pCount++}`;
+        params.push(cod_prod);
     }
     if (storeId) {
-        return db.query(
-            'SELECT * FROM Inventario WHERE store_id = $1 ORDER BY fecha_mov DESC, id_mov DESC LIMIT $2 OFFSET $3',
-            [storeId, limit, offset]
-        );
+        query += ` AND store_id = $${pCount++}`;
+        params.push(storeId);
     }
-    return db.query(
-        'SELECT * FROM Inventario ORDER BY fecha_mov DESC, id_mov DESC LIMIT $1 OFFSET $2',
-        [limit, offset]
-    );
+    if (allowedStores !== 'ALL') {
+        query += ` AND store_id = ANY($${pCount++}::int[])`;
+        params.push(allowedStores);
+    }
+
+    query += ` ORDER BY fecha_mov DESC, id_mov DESC LIMIT $${pCount++} OFFSET $${pCount++}`;
+    params.push(limit, offset);
+
+    return db.query(query, params);
 };
 
-const countAllMovements = (cod_prod) =>
-    cod_prod
-        ? db.query('SELECT COUNT(*) FROM Inventario WHERE cod_prod = $1', [cod_prod])
-        : db.query('SELECT COUNT(*) FROM Inventario');
+const countAllMovements = ({ cod_prod = null, storeId = null, allowedStores = 'ALL' }: any = {}) => {
+    if (allowedStores !== 'ALL' && allowedStores.length === 0) return Promise.resolve({ rows: [{ count: 0 }] });
+
+    let query = 'SELECT COUNT(*) FROM Inventario WHERE 1=1';
+    const params: any[] = [];
+    let pCount = 1;
+
+    if (cod_prod) {
+        query += ` AND cod_prod = $${pCount++}`;
+        params.push(cod_prod);
+    }
+    if (storeId) {
+        query += ` AND store_id = $${pCount++}`;
+        params.push(storeId);
+    }
+    if (allowedStores !== 'ALL') {
+        query += ` AND store_id = ANY($${pCount++}::int[])`;
+        params.push(allowedStores);
+    }
+    return db.query(query, params);
+};
 
 const createMovement = ({ tipo_mov, fecha_mov, cantidad, cod_prod, fk_cod_prov, fk_id_vent, desc_mov, store_id = 1 }) =>
     db.query(
@@ -257,33 +275,47 @@ const findLowStock = () =>
 /**
  * Obtener trazabilidad (Kardex) de un producto
  */
-const getKardexByProduct = (cod_prod) =>
-    db.query(
-        `SELECT ml.id, ml.tipo_mov, ml.cantidad, ml.fecha_mov, ml.desc_mov, l.numero_lote 
-         FROM movimientos_lote ml
-         JOIN lotes l ON l.id = ml.lote_id
-         WHERE l.cod_prod = $1
-         ORDER BY ml.fecha_mov DESC`,
-        [cod_prod]
-    );
+const getKardexByProduct = (cod_prod, allowedStores = 'ALL') => {
+    if (allowedStores !== 'ALL' && allowedStores.length === 0) return Promise.resolve({ rows: [] });
+
+    let query = `SELECT ml.id, ml.tipo_mov, ml.cantidad, ml.fecha_mov, ml.desc_mov, l.numero_lote 
+                 FROM movimientos_lote ml
+                 JOIN lotes l ON l.id = ml.lote_id
+                 WHERE l.cod_prod = $1`;
+    
+    const params: any[] = [cod_prod];
+    
+    if (allowedStores !== 'ALL') {
+        query += ` AND l.store_id = ANY($2::int[])`;
+        params.push(allowedStores);
+    }
+    
+    query += ` ORDER BY ml.fecha_mov DESC`;
+    return db.query(query, params);
+};
 
 /**
  * Obtener todos los lotes de un producto
  */
-const findLotesByProduct = (cod_prod, storeId = null) =>
-    storeId
-        ? db.query(
-            `SELECT * FROM lotes
-             WHERE cod_prod = $1 AND store_id = $2 AND estado = 'ACTIVO'
-             ORDER BY fecha_ingreso DESC`,
-            [cod_prod, storeId]
-        )
-        : db.query(
-            `SELECT * FROM lotes
-             WHERE cod_prod = $1 AND estado = 'ACTIVO'
-             ORDER BY fecha_ingreso DESC`,
-            [cod_prod]
-        );
+const findLotesByProduct = (cod_prod, storeId = null, allowedStores = 'ALL') => {
+    if (allowedStores !== 'ALL' && allowedStores.length === 0) return Promise.resolve({ rows: [] });
+
+    let query = `SELECT * FROM lotes WHERE cod_prod = $1 AND estado = 'ACTIVO'`;
+    const params: any[] = [cod_prod];
+    let pCount = 2;
+
+    if (storeId) {
+        query += ` AND store_id = $${pCount++}`;
+        params.push(storeId);
+    }
+    if (allowedStores !== 'ALL') {
+        query += ` AND store_id = ANY($${pCount++}::int[])`;
+        params.push(allowedStores);
+    }
+
+    query += ` ORDER BY fecha_ingreso DESC`;
+    return db.query(query, params);
+};
 
 /**
  * Eliminar (inactivar) lote manualmente y generar historial

@@ -94,6 +94,12 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
         if (decoded.rol_usu) {
             req.headers['x-user-role'] = decoded.rol_usu;
         }
+        if (decoded.scope_type) {
+            req.headers['x-user-scope-type'] = decoded.scope_type;
+        }
+        if (decoded.scope_id) {
+            req.headers['x-user-scope-id'] = String(decoded.scope_id);
+        }
 
         next();
     } catch (error: any) {

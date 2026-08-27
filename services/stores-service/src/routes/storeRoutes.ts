@@ -11,6 +11,7 @@ const router = Router();
 // PATCH  /api/stores/:id/estado   — Cambiar estado (ABIERTO|CERRADO|OFFLINE)
 
 router.get('/',         ctrl.listStores);
+router.get('/by-scope', ctrl.getStoresByScope);
 router.post('/',        ctrl.createStore);
 router.get('/mesa-by-qr', ctrl.getMesaByQR);  // Antes de /:id para evitar conflicto
 router.get('/:id',      ctrl.getStore);

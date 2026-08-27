@@ -6,6 +6,7 @@ import directEmailService from '../services/directEmailService';
 import logActivity from '../utils/logActivity';
 import redisService from '../services/redisService';
 import parsePagination from '../utils/parsePagination';
+import { getAllowedStoreIds } from '../utils/rbacUtils';
 import logger from '../config/logger';
 
 /**
@@ -117,11 +118,22 @@ const deleteSupplier = async (req, res, next) => {
 // GET /api/inventory/movements
 const getMovements = async (req, res, next) => {
     try {
-        const { cod_prod } = req.query;
+        const { cod_prod, store_id } = req.query;
         const { page, limit, offset } = parsePagination(req.query);
+
+        const allowedStores = await getAllowedStoreIds(req);
+        if (allowedStores !== 'ALL' && allowedStores.length === 0) {
+            return res.status(403).json({ error: 'No tienes acceso a ninguna tienda.', code: 'FORBIDDEN_SCOPE' });
+        }
+
+        const requestedStoreId = store_id ? Number(store_id) : null;
+        if (allowedStores !== 'ALL' && requestedStoreId && !allowedStores.includes(requestedStoreId)) {
+            return res.status(403).json({ error: 'No tienes acceso a esta tienda.', code: 'FORBIDDEN_SCOPE' });
+        }
+
         const [rows, count] = await Promise.all([
-            inventoryRepository.findAllMovements({ cod_prod: cod_prod ? Number(cod_prod) : null, limit, offset }),
-            inventoryRepository.countAllMovements(cod_prod ? Number(cod_prod) : null),
+            inventoryRepository.findAllMovements({ cod_prod: cod_prod ? Number(cod_prod) : null, storeId: requestedStoreId, allowedStores, limit, offset }),
+            inventoryRepository.countAllMovements({ cod_prod: cod_prod ? Number(cod_prod) : null, storeId: requestedStoreId, allowedStores }),
         ]);
         res.status(200).json({
             data: rows.rows,
@@ -274,8 +286,14 @@ const getAlerts = async (_req, res, next) => {
 const getKardex = async (req, res, next) => {
     const { id } = req.params;
     try {
-        const movimientos = await inventoryRepository.getKardexByProduct(id);
-        const lotes = await inventoryRepository.findLotesByProduct(id);
+        const allowedStores = await getAllowedStoreIds(req);
+        if (allowedStores !== 'ALL' && allowedStores.length === 0) {
+            return res.status(403).json({ error: 'No tienes acceso a ninguna tienda.', code: 'FORBIDDEN_SCOPE' });
+        }
+        
+        // Kardex y lotes con RBAC
+        const movimientos = await inventoryRepository.getKardexByProduct(id, allowedStores);
+        const lotes = await inventoryRepository.findLotesByProduct(id, null, allowedStores);
         res.status(200).json({
             movimientos: movimientos.rows,
             lotes: lotes.rows
@@ -289,8 +307,19 @@ const getKardex = async (req, res, next) => {
 // GET /api/inventory/products/:id/lotes
 const getLotesByProduct = async (req, res, next) => {
     const { id } = req.params;
+    const { store_id } = req.query;
     try {
-        const result = await inventoryRepository.findLotesByProduct(id);
+        const allowedStores = await getAllowedStoreIds(req);
+        if (allowedStores !== 'ALL' && allowedStores.length === 0) {
+            return res.status(403).json({ error: 'No tienes acceso a ninguna tienda.', code: 'FORBIDDEN_SCOPE' });
+        }
+
+        const requestedStoreId = store_id ? Number(store_id) : null;
+        if (allowedStores !== 'ALL' && requestedStoreId && !allowedStores.includes(requestedStoreId)) {
+            return res.status(403).json({ error: 'No tienes acceso a esta tienda.', code: 'FORBIDDEN_SCOPE' });
+        }
+
+        const result = await inventoryRepository.findLotesByProduct(id, requestedStoreId, allowedStores);
         res.status(200).json(result.rows);
     } catch (error) {
         logger.error('error', { error: (error as Error).message });

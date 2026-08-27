@@ -33,7 +33,9 @@ export const registerSchema = Joi.object({
         'any.required': 'El correo es obligatorio.',
     }),
     password: strongPasswordField,
-    rol_usu: Joi.string().valid('admin', 'cliente').default('cliente'),
+    rol_usu: Joi.string().valid('admin', 'regional_manager', 'store_manager', 'cashier', 'customer').default('customer'),
+    scope_type: Joi.string().valid('GLOBAL', 'REGIONAL', 'TIENDA').allow(null).optional(),
+    scope_id: Joi.number().integer().allow(null).optional(),
     tel_usu: Joi.string().max(20).optional().allow('', null),
 });
 
@@ -52,10 +54,12 @@ export const updateUserSchema = Joi.object({
 
 // HU45 — Asignar rol: rol_usu requerido
 export const updateRoleSchema = Joi.object({
-    rol_usu: Joi.string().valid('admin', 'cliente').required().messages({
+    rol_usu: Joi.string().valid('admin', 'regional_manager', 'store_manager', 'cashier', 'customer').required().messages({
         'any.required': 'El rol es obligatorio.',
-        'any.only': 'El rol debe ser "admin" o "cliente".',
+        'any.only': 'El rol debe ser admin, regional_manager, store_manager, cashier o customer.',
     }),
+    scope_type: Joi.string().valid('GLOBAL', 'REGIONAL', 'TIENDA').allow(null).optional(),
+    scope_id: Joi.number().integer().allow(null).optional(),
 });
 
 // HU05 — Solicitar recuperación de contraseña

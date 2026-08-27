@@ -17,7 +17,7 @@ const RESET_CODE_EXPIRY_MINUTES = emailService.RESET_CODE_EXPIRY_MINUTES;
 const MAX_INTENTOS = 5;
 
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
-    const { nom_usu, correo_usu, password, rol_usu, tel_usu } = req.body;
+    const { nom_usu, correo_usu, password, rol_usu, scope_type, scope_id, tel_usu } = req.body;
 
     try {
         const existing = await userRepository.findByEmail(correo_usu);
@@ -26,15 +26,15 @@ export const register = async (req: Request, res: Response, next: NextFunction):
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const result = await userRepository.create(nom_usu, correo_usu, hashedPassword, rol_usu, tel_usu);
+        const result = await userRepository.create(nom_usu, correo_usu, hashedPassword, rol_usu, scope_type, scope_id, tel_usu);
 
-        logger.info('Usuario registrado', { correo_usu, rol_usu: rol_usu || 'cliente' });
+        logger.info('Usuario registrado', { correo_usu, rol_usu: rol_usu || 'customer' });
         res.status(201).json({
             message: 'Usuario registrado exitosamente.',
             id_usu: result.rows[0].id_usu
         });
 
-        logActivity({ user_email: correo_usu, user_name: nom_usu, action: 'created', entity_type: 'user', entity_id: result.rows[0].id_usu, details: `Usuario "${nom_usu}" registrado con rol ${rol_usu || 'cliente'}` });
+        logActivity({ user_email: correo_usu, user_name: nom_usu, action: 'created', entity_type: 'user', entity_id: result.rows[0].id_usu, details: `Usuario "${nom_usu}" registrado con rol ${rol_usu || 'customer'}` });
     } catch (error: unknown) {
         if ((error as any).code === '23505') {
             return res.status(409).json({ error: 'El correo ya está registrado.' });
@@ -313,7 +313,7 @@ export const updateRole = async (req: AuthenticatedRequest, res: Response, next:
     }
 
     try {
-        const result = await userRepository.updateRole(Number(id), req.body.rol_usu);
+        const result = await userRepository.updateRole(Number(id), req.body.rol_usu, req.body.scope_type, req.body.scope_id);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Usuario no encontrado.' });

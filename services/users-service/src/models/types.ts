@@ -4,6 +4,8 @@ export interface Cliente {
     correo_usu: string;
     password_usu?: string;
     rol_usu?: string;
+    scope_type?: 'GLOBAL' | 'REGIONAL' | 'TIENDA' | null;
+    scope_id?: number | null;
     tel_usu?: string;
     intentos_fallidos?: number;
     bloqueado_hasta?: Date | null;

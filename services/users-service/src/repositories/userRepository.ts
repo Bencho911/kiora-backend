@@ -6,7 +6,7 @@ export const findByEmail = (correo_usu: string) =>
 
 export const findById = (id_usu: number) =>
     db.query(
-        `SELECT id_usu, nom_usu, correo_usu, rol_usu, bloqueado_hasta, session_version
+        `SELECT id_usu, nom_usu, correo_usu, rol_usu, scope_type, scope_id, bloqueado_hasta, session_version
          FROM Cliente WHERE id_usu = $1 AND activo = true`,
         [id_usu]
     );
@@ -25,13 +25,13 @@ export const findByIdWithPassword = (id_usu: number) =>
 
 export const findProfile = (id_usu: number) =>
     db.query(
-        'SELECT id_usu, nom_usu, correo_usu, rol_usu, tel_usu FROM Cliente WHERE id_usu = $1 AND activo = true',
+        'SELECT id_usu, nom_usu, correo_usu, rol_usu, scope_type, scope_id, tel_usu FROM Cliente WHERE id_usu = $1 AND activo = true',
         [id_usu]
     );
 
 export const findAll = (limit = 20, offset = 0) =>
     db.query(
-        `SELECT id_usu, nom_usu, correo_usu, rol_usu, tel_usu, intentos_fallidos, bloqueado_hasta
+        `SELECT id_usu, nom_usu, correo_usu, rol_usu, scope_type, scope_id, tel_usu, intentos_fallidos, bloqueado_hasta
          FROM Cliente
          WHERE activo = true
          ORDER BY id_usu
@@ -47,21 +47,21 @@ export const findAdmins = () =>
         `SELECT correo_usu FROM Cliente WHERE activo = true AND rol_usu = 'admin'`
     );
 
-export const create = (nom_usu: string, correo_usu: string, hashedPassword: string, rol_usu?: string, tel_usu?: string) =>
+export const create = (nom_usu: string, correo_usu: string, hashedPassword: string, rol_usu?: string, scope_type?: string | null, scope_id?: number | null, tel_usu?: string) =>
     db.query(
-        `INSERT INTO Cliente (nom_usu, correo_usu, password_usu, rol_usu, tel_usu)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id_usu`,
-        [nom_usu, correo_usu, hashedPassword, rol_usu || 'cliente', tel_usu || null]
+        `INSERT INTO Cliente (nom_usu, correo_usu, password_usu, rol_usu, scope_type, scope_id, tel_usu)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id_usu`,
+        [nom_usu, correo_usu, hashedPassword, rol_usu || 'customer', scope_type || null, scope_id || null, tel_usu || null]
     );
 
 export const update = (id_usu: number, fields: Partial<Cliente>) => {
-    const allowed = ['nom_usu', 'correo_usu', 'tel_usu', 'rol_usu'];
+    const allowed = ['nom_usu', 'correo_usu', 'tel_usu', 'rol_usu', 'scope_type', 'scope_id'];
     const entries = Object.entries(fields).filter(([key]) => allowed.includes(key));
     const setClauses = entries.map(([key], i) => `${key} = $${i + 1}`).join(', ');
     return db.query(
         `UPDATE Cliente SET ${setClauses}
          WHERE id_usu = $${entries.length + 1} AND activo = true
-         RETURNING id_usu, nom_usu, correo_usu, rol_usu, tel_usu`,
+         RETURNING id_usu, nom_usu, correo_usu, rol_usu, scope_type, scope_id, tel_usu`,
         [...entries.map(([, val]) => val), id_usu]
     );
 };
@@ -72,12 +72,12 @@ export const softDelete = (id_usu: number) =>
         [id_usu]
     );
 
-export const updateRole = (id_usu: number, rol_usu: string) =>
+export const updateRole = (id_usu: number, rol_usu: string, scope_type?: string | null, scope_id?: number | null) =>
     db.query(
-        `UPDATE Cliente SET rol_usu = $1
-         WHERE id_usu = $2 AND activo = true
-         RETURNING id_usu, nom_usu, correo_usu, rol_usu`,
-        [rol_usu, id_usu]
+        `UPDATE Cliente SET rol_usu = $1, scope_type = $2, scope_id = $3
+         WHERE id_usu = $4 AND activo = true
+         RETURNING id_usu, nom_usu, correo_usu, rol_usu, scope_type, scope_id`,
+        [rol_usu, scope_type || null, scope_id || null, id_usu]
     );
 
 export const incrementLoginAttempts = (id_usu: number, intentos: number) =>

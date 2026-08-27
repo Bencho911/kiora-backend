@@ -3,6 +3,7 @@ import * as orderRepository from '../repositories/orderRepository';
 import * as orderService from '../services/orderService';
 import { parsePagination } from '../utils/parsePagination';
 import { logActivity } from '../utils/logActivity';
+import { getAllowedStoreIds } from '../utils/rbacUtils';
 import logger from '../config/logger';
 
 /**
@@ -15,10 +16,23 @@ import logger from '../config/logger';
 export const getOrders = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { page, limit, offset } = parsePagination(req.query);
-        const store_id = req.query.store_id ? Number(req.query.store_id) : null;
+        const requestedStoreId = req.query.store_id ? Number(req.query.store_id) : null;
+        
+        const allowedStores = await getAllowedStoreIds(req);
+        if (allowedStores !== 'ALL' && allowedStores.length === 0) {
+            return res.status(403).json({ error: 'No tienes acceso a ninguna tienda.', code: 'FORBIDDEN_SCOPE' });
+        }
+
+        let store_id = requestedStoreId;
+        if (allowedStores !== 'ALL' && requestedStoreId) {
+            if (!allowedStores.includes(requestedStoreId)) {
+                return res.status(403).json({ error: 'No tienes acceso a esta tienda.', code: 'FORBIDDEN_SCOPE' });
+            }
+        }
+
         const [rows, count] = await Promise.all([
-            orderRepository.findAll({ limit, offset, store_id }),
-            orderRepository.countAll(),
+            orderRepository.findAll({ limit, offset, store_id, allowedStores }),
+            orderRepository.countAll({ store_id, allowedStores }),
         ]);
         res.status(200).json({
             data: rows.rows,
@@ -109,7 +123,13 @@ export const getStats = async (req: Request, res: Response, next: NextFunction) 
     try {
         const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
         const period = req.query.period || '7d';
-        const data = await orderRepository.getStats(fecha as string, period as string);
+        
+        const allowedStores = await getAllowedStoreIds(req);
+        if (allowedStores !== 'ALL' && allowedStores.length === 0) {
+            return res.status(403).json({ error: 'No tienes acceso a ninguna tienda.', code: 'FORBIDDEN_SCOPE' });
+        }
+
+        const data = await orderRepository.getStats(fecha as string, period as string, allowedStores);
         
         const calcTrend = (hoy: number, ayer: number) => {
             if (ayer === 0 && hoy > 0) return 100;

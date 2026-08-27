@@ -7,30 +7,48 @@ import db from '../config/db';
 
 /* ── Ventas ──────────────────────────────────────────────────────────────── */
 
-export const findAll = ({ limit = 20, offset = 0, store_id = null }: any = {}) => {
-    if (store_id) {
-        return db.query(
-            `SELECT v.*, 
+export const findAll = ({ limit = 20, offset = 0, store_id = null, allowedStores = 'ALL' }: any = {}) => {
+    if (allowedStores !== 'ALL' && allowedStores.length === 0) return Promise.resolve({ rows: [] });
+
+    let query = `SELECT v.*, 
                 (SELECT string_agg(COALESCE(nom_prod, 'Prod #' || cod_prod), ', ') FROM Producto_Venta pv WHERE pv.fk_id_vent = v.id_vent) as productos_resumen
-             FROM Ventas v 
-             WHERE v.store_id = $1
-             ORDER BY fecha_vent DESC 
-             LIMIT $2 OFFSET $3`,
-            [store_id, limit, offset]
-        );
+             FROM Ventas v WHERE 1=1`;
+    const params: any[] = [];
+    let pCount = 1;
+
+    if (store_id) {
+        query += ` AND v.store_id = $${pCount++}`;
+        params.push(store_id);
     }
-    return db.query(
-        `SELECT v.*, 
-            (SELECT string_agg(COALESCE(nom_prod, 'Prod #' || cod_prod), ', ') FROM Producto_Venta pv WHERE pv.fk_id_vent = v.id_vent) as productos_resumen
-         FROM Ventas v 
-         ORDER BY fecha_vent DESC 
-         LIMIT $1 OFFSET $2`,
-        [limit, offset]
-    );
+
+    if (allowedStores !== 'ALL') {
+        query += ` AND v.store_id = ANY($${pCount++}::int[])`;
+        params.push(allowedStores);
+    }
+
+    query += ` ORDER BY fecha_vent DESC LIMIT $${pCount++} OFFSET $${pCount++}`;
+    params.push(limit, offset);
+
+    return db.query(query, params);
 };
 
-export const countAll = () =>
-    db.query('SELECT COUNT(*) FROM Ventas');
+export const countAll = ({ store_id = null, allowedStores = 'ALL' }: any = {}) => {
+    if (allowedStores !== 'ALL' && allowedStores.length === 0) return Promise.resolve({ rows: [{ count: 0 }] });
+    
+    let query = 'SELECT COUNT(*) FROM Ventas WHERE 1=1';
+    const params: any[] = [];
+    let pCount = 1;
+
+    if (store_id) {
+        query += ` AND store_id = $${pCount++}`;
+        params.push(store_id);
+    }
+    if (allowedStores !== 'ALL') {
+        query += ` AND store_id = ANY($${pCount++}::int[])`;
+        params.push(allowedStores);
+    }
+    return db.query(query, params);
+};
 
 export const findById = (id_vent: string | number) =>
     db.query('SELECT * FROM Ventas WHERE id_vent = $1', [id_vent]);
@@ -145,7 +163,19 @@ export const updatePaymentInfo = (id_vent: string | number, paymentIntent: strin
 export const remove = (id_vent: string | number) =>
     db.query('DELETE FROM Ventas WHERE id_vent = $1 RETURNING id_vent', [id_vent]);
 
-export const getStats = async (fecha: string, period = '7d') => {
+export const getStats = async (fecha: string, period = '7d', allowedStores: number[] | 'ALL' = 'ALL') => {
+    if (allowedStores !== 'ALL' && allowedStores.length === 0) {
+        return {
+            hoy: { total_ventas: 0, monto_total: 0, ticket_promedio: 0, ultima_venta: null },
+            ayer: { total_ventas: 0, monto_total: 0, ticket_promedio: 0 },
+            pagos: { pagos_efectivo: 0, pagos_tarjeta: 0 },
+            evolucion: []
+        };
+    }
+
+    const storeFilter = allowedStores !== 'ALL' ? ` AND store_id = ANY($2::int[]) ` : '';
+    const paramsHoy = allowedStores !== 'ALL' ? [fecha, allowedStores] : [fecha];
+
     const statsHoyQuery = db.query(
         `SELECT
             COUNT(*)::int AS total_ventas,
@@ -156,12 +186,14 @@ export const getStats = async (fecha: string, period = '7d') => {
                 FROM Ventas
                 WHERE fecha_vent::date = $1::date
                   AND estado = 'completada'
+                  ${storeFilter}
                 ORDER BY fecha_vent DESC LIMIT 1
             ) v) AS ultima_venta
          FROM Ventas
          WHERE fecha_vent::date = $1::date
-           AND estado = 'completada'`,
-        [fecha]
+           AND estado = 'completada'
+           ${storeFilter}`,
+        paramsHoy
     );
 
     const statsAyerQuery = db.query(
@@ -171,8 +203,9 @@ export const getStats = async (fecha: string, period = '7d') => {
             CASE WHEN COUNT(*) > 0 THEN SUM(montofinal_vent) / COUNT(*) ELSE 0 END AS ticket_promedio
          FROM Ventas
          WHERE fecha_vent::date = ($1::date - INTERVAL '1 day')
-           AND estado = 'completada'`,
-        [fecha]
+           AND estado = 'completada'
+           ${storeFilter}`,
+        paramsHoy
     );
 
     const pagosHoyQuery = db.query(
@@ -181,11 +214,13 @@ export const getStats = async (fecha: string, period = '7d') => {
             COUNT(*) FILTER (WHERE metodopago_usu NOT ILIKE '%efectivo%' OR metodopago_usu IS NULL)::int AS pagos_tarjeta
          FROM Ventas
          WHERE fecha_vent::date = $1::date
-           AND estado = 'completada'`,
-        [fecha]
+           AND estado = 'completada'
+           ${storeFilter}`,
+        paramsHoy
     );
 
     let evolucionQueryStr = '';
+    const vStoreFilter = allowedStores !== 'ALL' ? ` AND v.store_id = ANY($2::int[]) ` : '';
     
     if (period === 'this_month') {
         evolucionQueryStr = `
@@ -193,7 +228,7 @@ export const getStats = async (fecha: string, period = '7d') => {
                 EXTRACT(DAY FROM d) AS dow,
                 COALESCE(SUM(v.montofinal_vent), 0) AS total
             FROM generate_series(date_trunc('month', $1::date), date_trunc('month', $1::date) + interval '1 month' - interval '1 day', '1 day'::interval) d
-            LEFT JOIN Ventas v ON v.fecha_vent::date = d::date AND v.estado = 'completada'
+            LEFT JOIN Ventas v ON v.fecha_vent::date = d::date AND v.estado = 'completada' ${vStoreFilter}
             GROUP BY d
             ORDER BY d`;
     } else if (period === 'this_year') {
@@ -202,7 +237,7 @@ export const getStats = async (fecha: string, period = '7d') => {
                 EXTRACT(MONTH FROM d) AS dow,
                 COALESCE(SUM(v.montofinal_vent), 0) AS total
             FROM generate_series(date_trunc('year', $1::date), date_trunc('year', $1::date) + interval '11 months', '1 month'::interval) d
-            LEFT JOIN Ventas v ON date_trunc('month', v.fecha_vent::date) = d::date AND v.estado = 'completada'
+            LEFT JOIN Ventas v ON date_trunc('month', v.fecha_vent::date) = d::date AND v.estado = 'completada' ${vStoreFilter}
             GROUP BY d
             ORDER BY d`;
     } else {
@@ -212,12 +247,12 @@ export const getStats = async (fecha: string, period = '7d') => {
                 EXTRACT(ISODOW FROM d) AS dow,
                 COALESCE(SUM(v.montofinal_vent), 0) AS total
             FROM generate_series($1::date - INTERVAL '6 days', $1::date, '1 day'::interval) d
-            LEFT JOIN Ventas v ON v.fecha_vent::date = d::date AND v.estado = 'completada'
+            LEFT JOIN Ventas v ON v.fecha_vent::date = d::date AND v.estado = 'completada' ${vStoreFilter}
             GROUP BY d
             ORDER BY d`;
     }
 
-    const evolucionQuery = db.query(evolucionQueryStr, [fecha]);
+    const evolucionQuery = db.query(evolucionQueryStr, paramsHoy);
 
     const [hoyRes, ayerRes, pagosRes, evolucionRes] = await Promise.all([
         statsHoyQuery,

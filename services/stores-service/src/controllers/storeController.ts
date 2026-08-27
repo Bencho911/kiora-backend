@@ -71,6 +71,21 @@ async function updateStoreEstado(req: Request, res: Response, next: NextFunction
     }
 }
 
+// ── Scopes (RBAC) ──────────────────────────────────────────────────────────
+
+async function getStoresByScope(req: Request, res: Response, next: NextFunction) {
+    try {
+        const { scope_type, scope_id } = req.query;
+        if (!scope_type || !scope_id) {
+            return res.status(400).json({ error: 'scope_type y scope_id son requeridos.', code: 'VALIDATION_ERROR' });
+        }
+        const storeIds = await repo.findByScope(scope_type as string, Number(scope_id));
+        res.json({ data: storeIds });
+    } catch (err) {
+        next(err);
+    }
+}
+
 // ── Mesas ──────────────────────────────────────────────────────────────────
 
 async function listMesas(req: Request, res: Response, next: NextFunction) {
@@ -126,4 +141,5 @@ export default {
     listMesas,
     createMesa,
     getMesaByQR,
+    getStoresByScope,
 };

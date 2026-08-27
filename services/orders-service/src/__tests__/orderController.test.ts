@@ -36,7 +36,7 @@ describe('Order Controller', () => {
             (orderRepository.findAll as jest.Mock).mockResolvedValueOnce({ rows: [{ id_vent: 1 }] });
             (orderRepository.countAll as jest.Mock).mockResolvedValueOnce({ rows: [{ count: '1' }] });
 
-            const res = await request(app).get('/api/orders');
+            const res = await request(app).get('/api/orders').set('x-user-role', 'admin');
             expect(res.status).toBe(200);
             expect(res.body.data).toHaveLength(1);
             expect(res.body.pagination.total).toBe(1);
@@ -46,14 +46,14 @@ describe('Order Controller', () => {
     describe('GET /api/orders/:id', () => {
         it('debe retornar una orden por id', async () => {
             (orderRepository.findByIdWithItems as jest.Mock).mockResolvedValueOnce({ id_vent: 1 });
-            const res = await request(app).get('/api/orders/1');
+            const res = await request(app).get('/api/orders/1').set('x-user-role', 'admin');
             expect(res.status).toBe(200);
             expect(res.body.id_vent).toBe(1);
         });
 
         it('debe retornar 404 si no existe', async () => {
             (orderRepository.findByIdWithItems as jest.Mock).mockResolvedValueOnce(null);
-            const res = await request(app).get('/api/orders/999');
+            const res = await request(app).get('/api/orders/999').set('x-user-role', 'admin');
             expect(res.status).toBe(404);
         });
     });
@@ -62,7 +62,7 @@ describe('Order Controller', () => {
         it('debe crear una orden y delegar a orderService', async () => {
             (orderService.createOrder as jest.Mock).mockResolvedValueOnce({ id_vent: 1, montofinal_vent: 100 });
 
-            const res = await request(app).post('/api/orders').send({
+            const res = await request(app).post('/api/orders').set('x-user-role', 'admin').send({
                 items: [{ cod_prod: 1, cantidad: 2 }],
                 metodopago_usu: 'efectivo'
             });
@@ -77,7 +77,7 @@ describe('Order Controller', () => {
         it('debe actualizar el estado de una orden', async () => {
             (orderService.updateStatus as jest.Mock).mockResolvedValueOnce({ data: { id_vent: 1, estado: 'completada' } });
 
-            const res = await request(app).put('/api/orders/1/status').send({
+            const res = await request(app).put('/api/orders/1/status').set('x-user-role', 'admin').send({
                 estado: 'completada'
             });
 
@@ -89,7 +89,7 @@ describe('Order Controller', () => {
         it('debe retornar error si falla el servicio', async () => {
             (orderService.updateStatus as jest.Mock).mockResolvedValueOnce({ error: 'Stock insuficiente', status: 409 });
 
-            const res = await request(app).put('/api/orders/1/status').send({
+            const res = await request(app).put('/api/orders/1/status').set('x-user-role', 'admin').send({
                 estado: 'completada'
             });
 
@@ -102,7 +102,7 @@ describe('Order Controller', () => {
         it('debe eliminar una orden', async () => {
             (orderRepository.remove as jest.Mock).mockResolvedValueOnce({ rows: [{ id_vent: 1 }] });
 
-            const res = await request(app).delete('/api/orders/1');
+            const res = await request(app).delete('/api/orders/1').set('x-user-role', 'admin');
             expect(res.status).toBe(200);
         });
     });
@@ -111,7 +111,7 @@ describe('Order Controller', () => {
         it('debe chequear si un producto tiene ventas', async () => {
             (orderRepository.checkProductInSales as jest.Mock).mockResolvedValueOnce(true);
 
-            const res = await request(app).get('/api/orders/products/1/has-sales');
+            const res = await request(app).get('/api/orders/products/1/has-sales').set('x-user-role', 'admin');
             expect(res.status).toBe(200);
             expect(res.body.hasSales).toBe(true);
         });

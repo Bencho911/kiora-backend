@@ -76,6 +76,30 @@ export async function updateEstado(id: number, estado: string): Promise<Partial<
 
 // ── Mesas ──────────────────────────────────────────────────────────────────
 
+export async function findByScope(scopeType: string, scopeId: number): Promise<number[]> {
+    if (scopeType === 'GLOBAL') {
+        const { rows } = await db.query('SELECT id_tienda FROM Tienda WHERE activa = TRUE');
+        return rows.map(r => r.id_tienda);
+    }
+    if (scopeType === 'TIENDA') {
+        return [scopeId];
+    }
+    if (scopeType === 'CIUDAD') {
+        const { rows } = await db.query('SELECT id_tienda FROM Tienda WHERE fk_ciudad_id = $1 AND activa = TRUE', [scopeId]);
+        return rows.map(r => r.id_tienda);
+    }
+    if (scopeType === 'REGIONAL') {
+        const { rows } = await db.query(`
+            SELECT t.id_tienda 
+            FROM Tienda t
+            JOIN Ciudad c ON t.fk_ciudad_id = c.id
+            WHERE c.fk_regional_id = $1 AND t.activa = TRUE
+        `, [scopeId]);
+        return rows.map(r => r.id_tienda);
+    }
+    return [];
+}
+
 export async function findMesasByTienda(storeId: number): Promise<any[]> {
     const { rows } = await db.query(
         `SELECT id_mesa, fk_id_tienda, numero, qr_code, activa, creado_en
@@ -119,4 +143,5 @@ export default {
     findMesasByTienda,
     createMesa,
     findMesaByQR,
+    findByScope,
 };

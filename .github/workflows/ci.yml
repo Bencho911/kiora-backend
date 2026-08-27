@@ -16,7 +16,7 @@ jobs:
         # docker compose comprueba que env_file exista aunque sea vacío; los reales están en .gitignore.
         run: |
           set -e
-          for svc in activity-service ai-service api-gateway inventory-service notifications-service orders-service products-service reports-service telegram-bot users-service; do
+          for svc in activity-service ai-service api-gateway inventory-service notifications-service orders-service products-service reports-service stores-service telegram-bot users-service; do
             touch "services/$svc/.env.docker"
           done
       - name: Validar sintaxis de docker-compose.yml
@@ -263,3 +263,119 @@ jobs:
       - run: npm test -- --forceExit
         env:
           NODE_ENV: test
+
+  test-stores-service:
+    name: Tests — stores-service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/stores-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/stores-service/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run audit:ci
+      - run: npm test -- --forceExit
+        env:
+          NODE_ENV: test
+
+  migrations-stores-service:
+    name: Migraciones — stores-service (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kiora_stores_migration_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kiora_stores_migration_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: services/stores-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/stores-service/package-lock.json
+      - run: npm ci
+      - run: npm run test:migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/kiora_stores_migration_ci
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: kiora_stores_migration_ci
+          RUN_MIGRATION_TESTS: 'true'
+
+  test-activity-service:
+    name: Tests — activity-service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/activity-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/activity-service/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run audit:ci
+      - run: npm test -- --forceExit
+        env:
+          NODE_ENV: test
+
+  migrations-activity-service:
+    name: Migraciones — activity-service (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kiora_activity_migration_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kiora_activity_migration_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: services/activity-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/activity-service/package-lock.json
+      - run: npm ci
+      - run: npm run test:migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/kiora_activity_migration_ci
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: kiora_activity_migration_ci
+          RUN_MIGRATION_TESTS: 'true'

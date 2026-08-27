@@ -100,7 +100,7 @@ describe('POST /api/auth/login', () => {
     test('200 – login exitoso (móvil): devuelve token en body', async () => {
         const hash = await hashPassword('mipassword');
         db.query
-            .mockResolvedValueOnce({ rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'cliente', password_usu: hash, bloqueado_hasta: null, intentos_fallidos: 0 }] })
+            .mockResolvedValueOnce({ rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'customer', password_usu: hash, bloqueado_hasta: null, intentos_fallidos: 0 }] })
             .mockResolvedValueOnce({ rows: [] });
 
         const res = await request(app)
@@ -115,7 +115,7 @@ describe('POST /api/auth/login', () => {
     test('200 – login exitoso (web): devuelve cookie HttpOnly', async () => {
         const hash = await hashPassword('mipassword');
         db.query
-            .mockResolvedValueOnce({ rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'cliente', password_usu: hash, bloqueado_hasta: null, intentos_fallidos: 0 }] })
+            .mockResolvedValueOnce({ rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'customer', password_usu: hash, bloqueado_hasta: null, intentos_fallidos: 0 }] })
             .mockResolvedValueOnce({ rows: [] });
 
         const res = await request(app)
@@ -208,7 +208,7 @@ describe('POST /api/auth/logout', () => {
     test('200 – logout exitoso', async () => {
         const jwt = require('jsonwebtoken');
         mockSessionVersionOnce(0);
-        const token = jwt.sign({ id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'cliente', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
+        const token = jwt.sign({ id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'customer', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
 
         const res = await request(app)
             .post('/api/auth/logout')
@@ -222,12 +222,12 @@ describe('POST /api/auth/logout', () => {
         const jwt = require('jsonwebtoken');
         mockSessionVersionOnce(0);
         const accessToken = jwt.sign(
-            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_SECRET,
             { expiresIn: '10m' }
         );
         const refreshToken = jwt.sign(
-            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_REFRESH_SECRET,
             { expiresIn: '7d' }
         );
@@ -263,7 +263,7 @@ describe('GET /api/auth/users', () => {
     test('403 – token de cliente (no admin)', async () => {
         const jwt = require('jsonwebtoken');
         mockSessionVersionOnce(0);
-        const clienteToken = jwt.sign({ id_usu: 2, rol_usu: 'cliente', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
+        const clienteToken = jwt.sign({ id_usu: 2, rol_usu: 'customer', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
 
         const res = await request(app)
             .get('/api/auth/users')
@@ -319,7 +319,7 @@ describe('POST /api/auth/refresh', () => {
     test('401 – usuario no existe en la BD', async () => {
         const jwt = require('jsonwebtoken');
         const refreshToken = jwt.sign(
-            { id_usu: 999, correo_usu: 'ghost@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 999, correo_usu: 'ghost@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_REFRESH_SECRET,
             { expiresIn: '7d' }
         );
@@ -337,14 +337,14 @@ describe('POST /api/auth/refresh', () => {
     test('423 – cuenta bloqueada al hacer refresh', async () => {
         const jwt = require('jsonwebtoken');
         const refreshToken = jwt.sign(
-            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_REFRESH_SECRET,
             { expiresIn: '7d' }
         );
 
         const bloqueado_hasta = new Date(Date.now() + 10 * 60000);
         db.query.mockResolvedValueOnce({
-            rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'cliente', bloqueado_hasta, session_version: 0 }]
+            rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'customer', bloqueado_hasta, session_version: 0 }]
         });
 
         const res = await request(app)
@@ -358,13 +358,13 @@ describe('POST /api/auth/refresh', () => {
     test('200 – refresh exitoso: devuelve nuevo access token y rota cookie', async () => {
         const jwt = require('jsonwebtoken');
         const refreshToken = jwt.sign(
-            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_REFRESH_SECRET,
             { expiresIn: '7d' }
         );
 
         db.query.mockResolvedValueOnce({
-            rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'cliente', bloqueado_hasta: null, session_version: 0 }]
+            rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'customer', bloqueado_hasta: null, session_version: 0 }]
         });
 
         const res = await request(app)
@@ -382,13 +382,13 @@ describe('POST /api/auth/refresh', () => {
     test('401 – refresh token ya revocado', async () => {
         const jwt = require('jsonwebtoken');
         const refreshToken = jwt.sign(
-            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_REFRESH_SECRET,
             { expiresIn: '7d' }
         );
 
         db.query.mockResolvedValueOnce({
-            rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'cliente', bloqueado_hasta: null, session_version: 0 }]
+            rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'customer', bloqueado_hasta: null, session_version: 0 }]
         });
 
         const firstRes = await request(app)
@@ -408,13 +408,13 @@ describe('POST /api/auth/refresh', () => {
     test('401 – refresh con session_version obsoleta (p. ej. tras restablecer contraseña)', async () => {
         const jwt = require('jsonwebtoken');
         const refreshToken = jwt.sign(
-            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 1, correo_usu: 'r@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_REFRESH_SECRET,
             { expiresIn: '7d' }
         );
 
         db.query.mockResolvedValueOnce({
-            rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'cliente', bloqueado_hasta: null, session_version: 1 }]
+            rows: [{ id_usu: 1, nom_usu: 'Ruben', correo_usu: 'r@test.com', rol_usu: 'customer', bloqueado_hasta: null, session_version: 1 }]
         });
 
         const res = await request(app)
@@ -441,7 +441,7 @@ describe('GET /api/auth/me', () => {
     test('401 – usuario del token inactivo o inexistente (sesión inválida)', async () => {
         const jwt = require('jsonwebtoken');
         const token = jwt.sign(
-            { id_usu: 999, correo_usu: 'ghost@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 999, correo_usu: 'ghost@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_SECRET,
             { expiresIn: '10m' }
         );
@@ -459,14 +459,14 @@ describe('GET /api/auth/me', () => {
     test('200 – devuelve perfil del usuario autenticado', async () => {
         const jwt = require('jsonwebtoken');
         const token = jwt.sign(
-            { id_usu: 3, correo_usu: 'perfil@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 3, correo_usu: 'perfil@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_SECRET,
             { expiresIn: '10m' }
         );
 
         mockSessionVersionOnce(0);
         db.query.mockResolvedValueOnce({
-            rows: [{ id_usu: 3, nom_usu: 'Ruben', correo_usu: 'perfil@test.com', rol_usu: 'cliente', tel_usu: null }]
+            rows: [{ id_usu: 3, nom_usu: 'Ruben', correo_usu: 'perfil@test.com', rol_usu: 'customer', tel_usu: null }]
         });
 
         const res = await request(app)
@@ -482,14 +482,14 @@ describe('GET /api/auth/me', () => {
     test('200 – acceso por cookie (cliente web)', async () => {
         const jwt = require('jsonwebtoken');
         const token = jwt.sign(
-            { id_usu: 2, correo_usu: 'web@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 2, correo_usu: 'web@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_SECRET,
             { expiresIn: '10m' }
         );
 
         mockSessionVersionOnce(0);
         db.query.mockResolvedValueOnce({
-            rows: [{ id_usu: 2, nom_usu: 'WebUser', correo_usu: 'web@test.com', rol_usu: 'cliente', tel_usu: null }]
+            rows: [{ id_usu: 2, nom_usu: 'WebUser', correo_usu: 'web@test.com', rol_usu: 'customer', tel_usu: null }]
         });
 
         const res = await request(app)
@@ -526,7 +526,7 @@ describe('PATCH /api/auth/users/:id', () => {
     test('403 – token de cliente (no admin)', async () => {
         const jwt = require('jsonwebtoken');
         mockSessionVersionOnce(0);
-        const clienteToken = jwt.sign({ id_usu: 2, rol_usu: 'cliente', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
+        const clienteToken = jwt.sign({ id_usu: 2, rol_usu: 'customer', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
 
         const res = await request(app)
             .patch('/api/auth/users/1')
@@ -562,7 +562,7 @@ describe('PATCH /api/auth/users/:id', () => {
     test('200 – actualización exitosa', async () => {
         mockSessionVersionOnce(0);
         db.query.mockResolvedValueOnce({
-            rows: [{ id_usu: 1, nom_usu: 'Nuevo Nombre', correo_usu: 'r@test.com', rol_usu: 'cliente', tel_usu: null }]
+            rows: [{ id_usu: 1, nom_usu: 'Nuevo Nombre', correo_usu: 'r@test.com', rol_usu: 'customer', tel_usu: null }]
         });
 
         const res = await request(app)
@@ -601,7 +601,7 @@ describe('DELETE /api/auth/users/:id', () => {
     test('403 – token de cliente (no admin)', async () => {
         const jwt = require('jsonwebtoken');
         mockSessionVersionOnce(0);
-        const clienteToken = jwt.sign({ id_usu: 2, rol_usu: 'cliente', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
+        const clienteToken = jwt.sign({ id_usu: 2, rol_usu: 'customer', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
 
         const res = await request(app)
             .delete('/api/auth/users/1')
@@ -670,7 +670,7 @@ describe('PATCH /api/auth/users/:id/role', () => {
     test('403 – token de cliente (no admin)', async () => {
         const jwt = require('jsonwebtoken');
         mockSessionVersionOnce(0);
-        const clienteToken = jwt.sign({ id_usu: 2, rol_usu: 'cliente', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
+        const clienteToken = jwt.sign({ id_usu: 2, rol_usu: 'customer', sv: 0 }, process.env.JWT_SECRET, { expiresIn: '10m' });
 
         const res = await request(app)
             .patch('/api/auth/users/1/role')
@@ -695,7 +695,7 @@ describe('PATCH /api/auth/users/:id/role', () => {
         const res = await request(app)
             .patch('/api/auth/users/99/role')
             .set('Authorization', `Bearer ${adminToken}`)
-            .send({ rol_usu: 'cliente' });
+            .send({ rol_usu: 'customer' });
 
         expect(res.statusCode).toBe(403);
         expect(res.body.error).toMatch(/tu propio rol/i);
@@ -873,7 +873,7 @@ describe('PATCH /api/auth/me/password', () => {
     beforeAll(() => {
         const jwt = require('jsonwebtoken');
         clienteToken = jwt.sign(
-            { id_usu: 7, correo_usu: 'cliente@test.com', rol_usu: 'cliente', sv: 0 },
+            { id_usu: 7, correo_usu: 'cliente@test.com', rol_usu: 'customer', sv: 0 },
             process.env.JWT_SECRET,
             { expiresIn: '10m' }
         );
