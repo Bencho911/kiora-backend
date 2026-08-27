@@ -6,5 +6,6 @@ set -e
 echo "[entrypoint] Aplicando migraciones..."
 npm run migrate:up:docker
 
-echo "[entrypoint] Iniciando orders-service..."
-exec node src/index.js
+# Ejecutar la aplicación
+echo "Iniciando orders-service..."
+exec npm start

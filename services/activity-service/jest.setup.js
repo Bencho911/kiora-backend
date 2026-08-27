@@ -1,0 +1,7 @@
+process.env.JWT_SECRET = 'test-secret';
+process.env.DB_USER = 'test';
+process.env.DB_PASSWORD = 'test';
+require('dotenv').config({ path: '.env.local' });
+process.env.DB_HOST = 'localhost';
+process.env.DB_PORT = '5432';
+process.env.DB_NAME = 'testdb';

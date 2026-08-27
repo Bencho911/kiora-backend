@@ -2,15 +2,15 @@
   "name": "reports-service",
   "version": "1.0.0",
   "description": "Servicio de reportes y facturas en PDF para Kiora",
-  "main": "src/index.js",
-  "type": "commonjs",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
     "test": "jest --runInBand",
     "audit:ci": "npm audit --audit-level=high",
-    "lint": "eslint src --max-warnings 0",
-    "lint:fix": "eslint src --fix --max-warnings 0"
+    "lint": "eslint src --ext .ts --max-warnings 0",
+    "lint:fix": "eslint src --ext .ts --fix --max-warnings 0"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -24,9 +24,18 @@
     "winston": "^3.13.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.3.0",
+    "@types/pdfkit": "^0.17.6",
+    "@types/supertest": "^7.2.1",
     "eslint": "^8.57.0",
     "jest": "^30.2.0",
     "nodemon": "^3.1.0",
-    "supertest": "^7.0.0"
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.4.12",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.3"
   }
 }

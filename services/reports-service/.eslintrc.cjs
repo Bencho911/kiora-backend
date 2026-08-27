@@ -9,7 +9,7 @@ module.exports = {
     extends: ['eslint:recommended'],
     parserOptions: {
         ecmaVersion: 2022,
-        sourceType: 'script',
+        sourceType: 'module',
     },
     ignorePatterns: ['node_modules/', 'coverage/'],
     rules: {

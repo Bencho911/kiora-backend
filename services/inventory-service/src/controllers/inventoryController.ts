@@ -1,0 +1,339 @@
+'use strict';
+
+import inventoryRepository from '../repositories/inventoryRepository';
+import inventoryService from '../services/inventoryService';
+import directEmailService from '../services/directEmailService';
+import logActivity from '../utils/logActivity';
+import redisService from '../services/redisService';
+import parsePagination from '../utils/parsePagination';
+import logger from '../config/logger';
+
+/**
+ * inventoryController
+ * Responsabilidad: orquestar request → service/repository → response.
+ * La lógica de negocio (sync stock, circuit breaker) está en inventoryService.
+ */
+
+/* ── Proveedores ──────────────────────────────────────────────────────────── */
+
+// GET /api/inventory/suppliers
+const getSuppliers = async (req, res, next) => {
+    try {
+        const { page, limit, offset } = parsePagination(req.query, { defaultLimit: 100 });
+        const [rows, count] = await Promise.all([
+            inventoryRepository.findAllSuppliers({ limit, offset }),
+            inventoryRepository.countAllSuppliers(),
+        ]);
+        res.status(200).json({
+            data: rows.rows,
+            pagination: {
+                total: parseInt(count.rows[0].count, 10),
+                page,
+                limit,
+                totalPages: Math.ceil(count.rows[0].count / limit),
+            }
+        });
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// GET /api/inventory/suppliers/:id
+const getSupplierById = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const result = await inventoryRepository.findSupplierById(id);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Proveedor no encontrado.', code: 'NOT_FOUND' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// POST /api/inventory/suppliers
+const createSupplier = async (req, res, next) => {
+    const { nom_prov, id_prov, tel_prov, tipoid_prov, correo_prov, dir_prov } = req.body;
+    try {
+        if (id_prov) {
+            const existing = await inventoryRepository.findSupplierByIdProv(id_prov);
+            if (existing.rows.length > 0) {
+                return res.status(400).json({ error: 'El NIT/ID ya se encuentra registrado para otro proveedor.', code: 'DUPLICATE_ID' });
+            }
+        }
+        const result = await inventoryRepository.createSupplier({ id_prov, nom_prov, tel_prov, tipoid_prov, correo_prov, dir_prov });
+        logger.info('Proveedor creado', { cod_prov: result.rows[0].cod_prov });
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// PUT /api/inventory/suppliers/:id
+const updateSupplier = async (req, res, next) => {
+    const { id } = req.params;
+    const { id_prov } = req.body;
+    try {
+        if (id_prov) {
+            const existing = await inventoryRepository.findSupplierByIdProv(id_prov, id);
+            if (existing.rows.length > 0) {
+                return res.status(400).json({ error: 'El NIT/ID ya se encuentra registrado para otro proveedor.', code: 'DUPLICATE_ID' });
+            }
+        }
+        const result = await inventoryRepository.updateSupplier(id, req.body);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Proveedor no encontrado o ningún campo válido enviado.', code: 'NOT_FOUND' });
+        }
+        logger.info('Proveedor actualizado', { cod_prov: id });
+        res.status(200).json(result.rows[0]);
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// DELETE /api/inventory/suppliers/:id
+const deleteSupplier = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const result = await inventoryRepository.removeSupplier(id);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Proveedor no encontrado.', code: 'NOT_FOUND' });
+        }
+        logger.info('Proveedor eliminado', { cod_prov: id });
+        res.status(200).json({ message: 'Proveedor eliminado exitosamente.' });
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+/* ── Movimientos de stock ─────────────────────────────────────────────────── */
+
+// GET /api/inventory/movements
+const getMovements = async (req, res, next) => {
+    try {
+        const { cod_prod } = req.query;
+        const { page, limit, offset } = parsePagination(req.query);
+        const [rows, count] = await Promise.all([
+            inventoryRepository.findAllMovements({ cod_prod: cod_prod ? Number(cod_prod) : null, limit, offset }),
+            inventoryRepository.countAllMovements(cod_prod ? Number(cod_prod) : null),
+        ]);
+        res.status(200).json({
+            data: rows.rows,
+            pagination: {
+                total: parseInt(count.rows[0].count, 10),
+                page,
+                limit,
+                totalPages: Math.ceil(count.rows[0].count / limit),
+            }
+        });
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// POST /api/inventory/movements
+const createMovement = async (req, res, next) => {
+    const { tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento } = req.body;
+
+    try {
+        const movement = await inventoryService.registerMovement({
+            tipo_mov, cantidad, cod_prod, fecha_mov, fk_cod_prov, fk_id_vent, desc_mov, fecha_vencimiento
+        }, req.headers);
+        res.status(201).json(movement);
+
+        logActivity({ user_email: req.user?.correo_usu, user_name: req.user?.nombre_usu || 'Sistema', action: 'created', entity_type: 'movement', entity_id: movement.id_mov, details: `${tipo_mov} de ${cantidad} uds — prod #${cod_prod}` });
+    } catch (error) {
+        // Idempotencia: si fk_id_vent ya existe para ese cod_prod (unique index)
+        if (error.code === '23505' && error.constraint === 'uq_inventario_venta_producto') {
+            logger.warn('Movimiento duplicado ignorado (idempotencia)', { fk_id_vent, cod_prod });
+            return res.status(200).json({ message: 'Movimiento ya registrado para esta venta.', duplicado: true });
+        }
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+/* ── Suministra (HU14) ────────────────────────────────────────────────────── */
+
+// GET /api/inventory/suministra
+const getSuministra = async (req, res, next) => {
+    try {
+        const { page, limit, offset } = parsePagination(req.query);
+        const [rows, count] = await Promise.all([
+            inventoryRepository.findAllSuministra({ limit, offset }),
+            inventoryRepository.countAllSuministra(),
+        ]);
+        res.status(200).json({
+            data: rows.rows,
+            pagination: {
+                total: parseInt(count.rows[0].count, 10),
+                page,
+                limit,
+                totalPages: Math.ceil(count.rows[0].count / limit),
+            }
+        });
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// GET /api/inventory/suministra/:id
+const getSuministraById = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const result = await inventoryRepository.findSuministraById(id);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Registro de suministra no encontrado.', code: 'NOT_FOUND' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// GET /api/inventory/suministra/product/:cod_prod
+const getSuministraByProduct = async (req, res, next) => {
+    const { cod_prod } = req.params;
+    try {
+        const result = await inventoryRepository.findSuministraByProduct(cod_prod);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Registro de suministra no encontrado para el producto.', code: 'NOT_FOUND' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+/**
+ * POST /api/inventory/suministra  (HU14)
+ * Crea o actualiza (upsert) el stock de un proveedor-producto.
+ */
+const upsertSuministra = async (req, res, next) => {
+    const { fk_cod_prov, cod_prod, stock, stock_minimo } = req.body;
+
+    try {
+        const result = await inventoryRepository.upsertSuministra({
+            fk_cod_prov, cod_prod, stock, stock_minimo
+        });
+        const row = result.rows[0];
+
+        logger.info('Suministra actualizado', { id: row.id, cod_prod, stock: row.stock });
+
+        const lowStock = row.stock <= row.stock_minimo;
+        if (lowStock) {
+            await directEmailService.sendLowStockEmail({
+                cod_prod: row.cod_prod,
+                stock_actual: row.stock,
+                stock_minimo: row.stock_minimo
+            }, null); // Usa ALERT_EMAIL / ADMIN_EMAIL del .env
+
+            await redisService.emitLowStockAlert({
+                cod_prod: row.cod_prod,
+                stock_actual: row.stock,
+                fk_cod_prov: row.fk_cod_prov
+            });
+            logger.warn('ALERTA: Stock bajo. Notificaciones enviadas.', { id: row.id, stock: row.stock });
+        }
+
+        res.status(200).json({
+            ...row,
+            alerta_stock_minimo: lowStock,
+            mensaje: lowStock
+                ? `⚠️ Stock actual (${row.stock}) está por debajo del mínimo configurado (${row.stock_minimo}).`
+                : undefined,
+        });
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// GET /api/inventory/alerts  (Kardex/Lotes)
+const getAlerts = async (_req, res, next) => {
+    try {
+        const result = await inventoryRepository.getAlerts();
+        res.status(200).json(result);
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// GET /api/inventory/products/:id/kardex
+const getKardex = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const movimientos = await inventoryRepository.getKardexByProduct(id);
+        const lotes = await inventoryRepository.findLotesByProduct(id);
+        res.status(200).json({
+            movimientos: movimientos.rows,
+            lotes: lotes.rows
+        });
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// GET /api/inventory/products/:id/lotes
+const getLotesByProduct = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        const result = await inventoryRepository.findLotesByProduct(id);
+        res.status(200).json(result.rows);
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+const getLowStock = async (_req, res, next) => {
+    try {
+        const result = await inventoryRepository.findLowStock();
+        res.status(200).json(result.rows);
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+// DELETE /api/inventory/lotes/:id
+const deleteLote = async (req, res, next) => {
+    const { id } = req.params;
+    try {
+        await inventoryRepository.deleteLote(id);
+        res.status(200).json({ message: 'Lote eliminado exitosamente' });
+    } catch (error) {
+        logger.error('error', { error: (error as Error).message });
+        next(error);
+    }
+};
+
+export default {
+    getSuppliers,
+    getSupplierById,
+    createSupplier,
+    updateSupplier,
+    deleteSupplier,
+    getMovements,
+    createMovement,
+    getSuministra,
+    getSuministraById,
+    getSuministraByProduct,
+    upsertSuministra,
+    getLowStock,
+    getAlerts,
+    getKardex,
+    getLotesByProduct,
+    deleteLote,
+};

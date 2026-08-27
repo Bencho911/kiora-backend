@@ -7,4 +7,4 @@ echo "[entrypoint] Aplicando migraciones..."
 npm run migrate:up:docker
 
 echo "[entrypoint] Iniciando products-service..."
-exec node src/index.js
+exec node dist/index.js

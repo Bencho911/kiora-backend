@@ -96,6 +96,24 @@ services:
       timeout: 5s
       retries: 5
 
+  stores-db:
+    image: postgres:16-alpine
+    container_name: kiora_stores_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      POSTGRES_DB: kiora_stores
+    networks:
+      - kiora-backend-net
+    volumes:
+      - stores_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_stores"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ─────────────────────────────────────────────
   # INFRAESTRUCTURA COMPARTIDA
   # ─────────────────────────────────────────────
@@ -165,6 +183,7 @@ services:
       REPORTS_SERVICE_URL: http://reports-service:3006
       ACTIVITY_SERVICE_URL: http://activity-service:3007
       AI_SERVICE_URL: http://ai-service:3008
+      STORES_SERVICE_URL: http://stores-service:3009
     depends_on:
       kiora-redis:
         condition: service_healthy
@@ -183,6 +202,8 @@ services:
       activity-service:
         condition: service_started
       ai-service:
+        condition: service_started
+      stores-service:
         condition: service_started
 
   users-service:
@@ -335,6 +356,30 @@ services:
     depends_on:
       - orders-service
 
+  stores-service:
+    build:
+      context: ./services/stores-service
+      dockerfile: Dockerfile
+    container_name: kiora_stores_service
+    restart: unless-stopped
+    networks:
+      - kiora-backend-net
+    env_file:
+      - ./services/stores-service/.env.docker
+    environment:
+      DB_HOST: stores-db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      DB_NAME: kiora_stores
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-rootpassword}@stores-db:5432/kiora_stores
+      OTEL_SERVICE_NAME: stores-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      TZ: ${TZ:-America/Bogota}
+    depends_on:
+      stores-db:
+        condition: service_healthy
+
   # ─────────────────────────────────────────────
   # OBSERVABILIDAD
   # ─────────────────────────────────────────────
@@ -472,6 +517,7 @@ volumes:
   orders_db_data:
   notifications_db_data:
   activity_db_data:
+  stores_db_data:
   redis_data:
   pgadmin_data:
   prometheus_data:

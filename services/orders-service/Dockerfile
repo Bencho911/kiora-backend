@@ -12,12 +12,16 @@ WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY --from=base /app/node_modules ./node_modules
-COPY . .
+COPY src ./src
+COPY tsconfig.json ./
 
-RUN chmod +x entrypoint.sh
-
-USER appuser
+# Build TypeScript
+RUN npm run build
 
 EXPOSE 3004
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["npm", "start"]

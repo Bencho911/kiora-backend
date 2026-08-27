@@ -14,7 +14,12 @@ WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY --from=base /app/node_modules ./node_modules
-COPY . .
+COPY package*.json ./
+COPY tsconfig.json ./
+COPY src ./src
+COPY entrypoint.sh ./
+
+RUN npm ci --include=dev && npm run build && npm ci --omit=dev
 
 # Pre-crear carpeta si necesita y dar permisos
 RUN chown -R appuser:appgroup /app && \

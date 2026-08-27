@@ -1,0 +1,12 @@
+{
+    "defaultEnv": "default",
+    "default": {
+        "user": { "ENV": "DB_USER" },
+        "password": { "ENV": "DB_PASSWORD" },
+        "host": { "ENV": "DB_HOST" },
+        "database": { "ENV": "DB_NAME" },
+        "port": { "ENV": "DB_PORT" },
+        "migrationsTable": "pgmigrations",
+        "dir": "src/db/migrations"
+    }
+}

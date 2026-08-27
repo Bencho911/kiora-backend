@@ -11,7 +11,11 @@ WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY --from=base /app/node_modules ./node_modules
-COPY . .
+COPY package*.json ./
+COPY tsconfig.json ./
+COPY src ./src
+
+RUN npm ci --include=dev && npm run build && npm ci --omit=dev
 
 RUN chown -R appuser:appgroup /app
 
@@ -20,4 +24,4 @@ USER appuser
 EXPOSE 3000
 
 # Usar node directamente para recibir SIGTERM limpiamente
-CMD ["node", "src/index.js"]
+CMD ["node", "dist/index.js"]

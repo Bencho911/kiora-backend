@@ -1,9 +1,7 @@
-/** @type {import('jest').Config} */
 module.exports = {
-    testEnvironment: 'node',
-    // Las migraciones requieren Postgres; se ejecutan con: npm run test:migrations
-    testPathIgnorePatterns: [
-        '/node_modules/',
-        '<rootDir>/src/__tests__/migrations.integration.test.js',
-    ],
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  testMatch: ['**/__tests__/**/*.test.ts'],
+  setupFiles: ['<rootDir>/jest.setup.js'],
+  clearMocks: true,
 };
