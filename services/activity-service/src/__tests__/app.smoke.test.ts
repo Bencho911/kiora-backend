@@ -1,6 +1,4 @@
 export {};
-import request from 'supertest';
-import app from '../app';
 
 describe('Activity Service Smoke Test', () => {
   it('GET /api/activity-logs/health responds with 200 (or equivalent health check)', async () => {

@@ -45,7 +45,7 @@ function drawFooter(doc, pageNumber) {
     doc.text('Kiora Micro-Market — Sistema de Venta Automatizada 24/7', MARGIN, y + 10, { align: 'center' });
     doc.text(`Página ${pageNumber}`, PAGE_WIDTH - MARGIN - 60, y + 10, { align: 'right', width: 60 });
     doc.text('Gracias por su compra', MARGIN, y + 10, { width: 100 });
-  } catch (_) { /* ignorar errores del footer */ }
+  } catch { /* ignorar errores del footer */ }
 }
 
 function drawInfoBlock(doc, order) {

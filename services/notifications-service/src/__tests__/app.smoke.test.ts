@@ -1,5 +1,4 @@
 export {};
-'use strict';
 
 // env.js exige variables antes de cargar app
 process.env.NODE_ENV = 'test';
