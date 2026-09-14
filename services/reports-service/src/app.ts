@@ -12,11 +12,12 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:3000', crede
 app.use(express.json());
 
 // ── Correlation ID (AsyncLocalStorage) — DEBE IR ANTES de cualquier ruta ──
-import correlationMiddleware from './middlewares/correlationMiddleware.js';
+import { correlationMiddleware } from '@kiora/shared';
 app.use(correlationMiddleware);
 
 // Health Check
-app.get('/api/reports/health', (req, res) => res.status(200).json({ status: 'OK' }));
+app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'reports-service' }));
+app.get('/api/reports/health', (_req, res) => res.status(200).json({ status: 'OK' }));
 
 // Swagger
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {

@@ -82,6 +82,21 @@ publicProxyRouter.use(createProxyMiddleware({
     } as any,
 }));
 
+// ── Auth public routes (/api/auth/*) — sin /v1, sin JWT ───────────────────
+publicProxyRouter.use('/api/auth', createProxyMiddleware({
+    target: services.users,
+    changeOrigin: true,
+    pathRewrite: (path) => `/api/auth${path}`,
+    on: {
+        proxyReq: (proxyReq: any, req: any) => {
+            const cid = req.headers['x-correlation-id'];
+            if (cid) proxyReq.setHeader('x-correlation-id', cid);
+        },
+        proxyRes: (proxyRes: any, req: any) => injectCors(proxyRes, req),
+        error: onProxyError('users-service (auth-public)'),
+    } as any,
+}));
+
 // ── Versioned routes (/api/v1/*) ──────────────────────────────────────────
 protectedProxyRouter.use('/api/v1/users', v1Proxy('users-service', services.users, '/users'));
 protectedProxyRouter.use('/api/v1/auth', v1Proxy('users-service', services.users, '/auth'));

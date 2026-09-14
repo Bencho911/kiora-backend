@@ -17,10 +17,12 @@
   },
   "type": "commonjs",
   "dependencies": {
+    "@kiora/shared": "file:../shared",
     "cors": "^2.8.5",
     "express": "^4.21.0",
+    "ioredis": "^6.0.0",
     "pg": "^8.13.0",
-    "@kiora/shared": "*"
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -37,5 +39,10 @@
     "ts-node-dev": "^2.0.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
+  },
+  "tsup": {
+    "noExternal": [
+      "@kiora/shared"
+    ]
   }
 }

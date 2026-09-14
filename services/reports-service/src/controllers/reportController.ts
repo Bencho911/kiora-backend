@@ -1,5 +1,5 @@
 'use strict';
-import logger from '../config/logger.js';
+import { logger } from '@kiora/shared';
 import { generateInvoicePDF  } from '../utils/pdfBuilder.js';
 
 import { getOrderById } from '../repositories/reportRepository.js';

@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: process.env.DOTENV_CONFIG_PATH || '.env.local' });
 
 import env from './config/env.js';
-import logger from './config/logger.js';
+import { logger } from '@kiora/shared';
 import app from './app.js';
 import { initTransporter  } from './services/emailService.js';
 import { startSubscriber  } from './services/notificationSubscriber.js';

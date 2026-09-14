@@ -1,6 +1,6 @@
 'use strict';
 
-import logger from '../config/logger.js';
+import { logger } from '@kiora/shared';
 import { generateSalesExcel  } from '../utils/excelBuilder.js';
 import { getOrders } from '../repositories/reportRepository.js';
 

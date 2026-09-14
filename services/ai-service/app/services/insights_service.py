@@ -51,8 +51,15 @@ Datos actuales del negocio:
             stream=False,
             response_format={"type": "json_object"}
         )
-        
         content = response.choices[0].message.content or "{}"
+    except Exception as e:
+        logger.error(f"[InsightsService] Deepseek API Error: {e}, falling back to mock insight.")
+        content = json.dumps({
+            "insight": "Registra más ventas para generar recomendaciones personalizadas de IA.",
+            "trend_percentage": 0.0,
+            "trend_direction": "up",
+            "trend_comparison": "vs semana pasada"
+        })
         
         # Validación estricta con Pydantic
         validated_data = InsightResponse.model_validate_json(content)

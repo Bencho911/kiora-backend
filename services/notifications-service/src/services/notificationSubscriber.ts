@@ -1,9 +1,9 @@
 'use strict';
 
-import logger from '../config/logger.js';
+import { logger } from '@kiora/shared';
 import { sendEmail  } from '../services/emailService.js';
 import alertRepository from '../repositories/alertRepository.js';
-import { createRedisClient } from '../../../../shared/redis/createRedisClient.js';
+import { createRedisClient } from '@kiora/shared';
 
 /**
  * Suscribe al stream Redis de notificaciones usando XREADGROUP

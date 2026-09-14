@@ -2,7 +2,7 @@
 
 import { Pool  } from 'pg';
 import env from './env.js';
-import logger from './logger.js';
+import { logger } from '@kiora/shared';
 
 const pool = new Pool({
     user: env.db.user,

@@ -1,216 +1,221 @@
-# Desarrollo local: optimizado para velocidad y debug (sin HA, sin Traefik, con puertos expuestos)
-
 services:
-  # ─────────────────────────────────────────────
-  # BASES DE DATOS (una por microservicio)
-  # ─────────────────────────────────────────────
-
   users-db:
     image: postgres:16-alpine
     container_name: kiora_users_db
     restart: unless-stopped
     ports:
-      - "5432:5432"
+    - 5432:5432
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       POSTGRES_DB: kiora_users
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     networks:
     - kiora-backend-net
     volumes:
     - users_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_users"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${DB_USER:-postgres} -d kiora_users
       interval: 10s
       timeout: 5s
       retries: 5
-
   products-db:
     image: postgres:16-alpine
     container_name: kiora_products_db
     restart: unless-stopped
     ports:
-      - "5433:5432"
+    - 5433:5432
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       POSTGRES_DB: kiora_products
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     networks:
     - kiora-backend-net
     volumes:
     - products_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_products"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${DB_USER:-postgres} -d kiora_products
       interval: 10s
       timeout: 5s
       retries: 5
-
   inventory-db:
     image: postgres:16-alpine
     container_name: kiora_inventory_db
     restart: unless-stopped
     ports:
-      - "5434:5432"
+    - 5434:5432
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       POSTGRES_DB: kiora_inventory
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     networks:
     - kiora-backend-net
     volumes:
     - inventory_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_inventory"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${DB_USER:-postgres} -d kiora_inventory
       interval: 10s
       timeout: 5s
       retries: 5
-
   orders-db:
     image: postgres:16-alpine
     container_name: kiora_orders_db
     restart: unless-stopped
     ports:
-      - "5435:5432"
+    - 5435:5432
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       POSTGRES_DB: kiora_orders
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     networks:
     - kiora-backend-net
     volumes:
     - orders_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_orders"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${DB_USER:-postgres} -d kiora_orders
       interval: 10s
       timeout: 5s
       retries: 5
-
   notifications-db:
     image: postgres:16-alpine
     container_name: kiora_notifications_db
     restart: unless-stopped
     ports:
-      - "5436:5432"
+    - 5436:5432
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       POSTGRES_DB: kiora_notifications
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     networks:
     - kiora-backend-net
     volumes:
     - notifications_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_notifications"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${DB_USER:-postgres} -d kiora_notifications
       interval: 10s
       timeout: 5s
       retries: 5
-
   stores-db:
     image: postgres:16-alpine
     container_name: kiora_stores_db
     restart: unless-stopped
     ports:
-      - "5437:5432"
+    - 5437:5432
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       POSTGRES_DB: kiora_stores
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     networks:
     - kiora-backend-net
     volumes:
     - stores_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_stores"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${DB_USER:-postgres} -d kiora_stores
       interval: 10s
       timeout: 5s
       retries: 5
-
   activity-db:
     image: postgres:16-alpine
     container_name: kiora_activity_db
     restart: unless-stopped
     ports:
-      - "5438:5432"
+    - 5438:5432
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       POSTGRES_DB: kiora_activity
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     networks:
     - kiora-backend-net
     volumes:
     - activity_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_activity"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${DB_USER:-postgres} -d kiora_activity
       interval: 10s
       timeout: 5s
       retries: 5
-
   reports-db:
     image: postgres:16-alpine
     container_name: kiora_reports_db
     restart: unless-stopped
     ports:
-      - "5439:5432"
+    - 5439:5432
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       POSTGRES_DB: kiora_reports
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     networks:
     - kiora-backend-net
     volumes:
     - reports_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d kiora_reports"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${DB_USER:-postgres} -d kiora_reports
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # ─────────────────────────────────────────────
-  # REDIS Standalone (Desarrollo)
-  # ─────────────────────────────────────────────
-
   redis:
     image: redis:7-alpine
     container_name: kiora_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
-    command: >
-      sh -c 'redis-server --requirepass "$$REDIS_PASSWORD"'
+    - 6379:6379
+    command: 'sh -c ''redis-server --requirepass "$$REDIS_PASSWORD"''
+
+      '
     environment:
-      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD no esta definido}
+    - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD no esta definido}
     networks:
     - kiora-backend-net
     volumes:
     - redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      test:
+      - CMD-SHELL
+      - redis-cli -a $$REDIS_PASSWORD ping | grep PONG
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # ─────────────────────────────────────────────
-  # MICROSERVICIOS
-  # ─────────────────────────────────────────────
-
   api-gateway:
     build:
       context: ./services/api-gateway
       dockerfile: Dockerfile
       additional_contexts:
-        - shared=./services/shared
+      - shared=./services/shared
     container_name: kiora_api_gateway
     restart: unless-stopped
     ports:
-      - "3000:3000"
+    - 3000:3000
     networks:
-      - kiora-backend-net
+    - kiora-backend-net
     env_file:
     - ./services/api-gateway/.env.docker
     environment:
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
       USERS_SERVICE_URL: http://users-service:3001
       PRODUCTS_SERVICE_URL: http://products-service:3002
       INVENTORY_SERVICE_URL: http://inventory-service:3003
@@ -241,13 +246,12 @@ services:
         condition: service_healthy
       stores-service:
         condition: service_healthy
-
   users-service:
     build:
       context: ./services/users-service
       dockerfile: Dockerfile
       additional_contexts:
-        - shared=./services/shared
+      - shared=./services/shared
     container_name: kiora_users_service
     restart: unless-stopped
     networks:
@@ -260,9 +264,10 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       DB_NAME: kiora_users
-      DATABASE_URL: 
-        postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no esta definido}@users-db:5432/kiora_users
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no
+        esta definido}@users-db:5432/kiora_users
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
       REDIS_PORT: 6379
       OTEL_SERVICE_NAME: users-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
@@ -273,17 +278,22 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/users/health"]
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:3001/health
       interval: 15s
       timeout: 5s
       retries: 5
-
   products-service:
     build:
       context: ./services/products-service
       dockerfile: Dockerfile
       additional_contexts:
-        - shared=./services/shared
+      - shared=./services/shared
     container_name: kiora_products_service
     restart: unless-stopped
     networks:
@@ -296,9 +306,10 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       DB_NAME: kiora_products
-      DATABASE_URL: 
-        postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no esta definido}@products-db:5432/kiora_products
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no
+        esta definido}@products-db:5432/kiora_products
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
       OTEL_SERVICE_NAME: products-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       TZ: ${TZ:-America/Bogota}
@@ -310,17 +321,22 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/api/products/health"]
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:3002/health
       interval: 15s
       timeout: 5s
       retries: 5
-
   inventory-service:
     build:
       context: ./services/inventory-service
       dockerfile: Dockerfile
       additional_contexts:
-        - shared=./services/shared
+      - shared=./services/shared
     container_name: kiora_inventory_service
     restart: unless-stopped
     networks:
@@ -333,9 +349,10 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       DB_NAME: kiora_inventory
-      DATABASE_URL: 
-        postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no esta definido}@inventory-db:5432/kiora_inventory
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no
+        esta definido}@inventory-db:5432/kiora_inventory
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
       REDIS_PORT: 6379
       ADMIN_EMAIL: ruben.camilo321@gmail.com
       PRODUCTS_SERVICE_URL: http://products-service:3002
@@ -349,17 +366,22 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/api/inventory/health"]
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:3003/health
       interval: 15s
       timeout: 5s
       retries: 5
-
   orders-service:
     build:
       context: ./services/orders-service
       dockerfile: Dockerfile
       additional_contexts:
-        - shared=./services/shared
+      - shared=./services/shared
     container_name: kiora_orders_service
     restart: unless-stopped
     networks:
@@ -372,25 +394,35 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       DB_NAME: kiora_orders
-      DATABASE_URL: 
-        postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no esta definido}@orders-db:5432/kiora_orders
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no
+        esta definido}@orders-db:5432/kiora_orders
       INVENTORY_SERVICE_URL: http://inventory-service:3003
       OTEL_SERVICE_NAME: orders-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       TZ: ${TZ:-America/Bogota}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     depends_on:
       orders-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3004/api/orders/health"]
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:3004/health
       interval: 15s
       timeout: 5s
       retries: 5
-
   notifications-service:
     build:
       context: ./services/notifications-service
       dockerfile: Dockerfile
+      additional_contexts:
+      - shared=./services/shared
     container_name: kiora_notifications_service
     restart: unless-stopped
     networks:
@@ -403,9 +435,10 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       DB_NAME: kiora_notifications
-      DATABASE_URL: 
-        postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no esta definido}@notifications-db:5432/kiora_notifications
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no
+        esta definido}@notifications-db:5432/kiora_notifications
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
       REDIS_PORT: 6379
       TZ: ${TZ:-America/Bogota}
     depends_on:
@@ -414,15 +447,22 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3005/api/notifications/health"]
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:3005/health
       interval: 15s
       timeout: 5s
       retries: 5
-
   reports-service:
     build:
       context: ./services/reports-service
       dockerfile: Dockerfile
+      additional_contexts:
+      - shared=./services/shared
     container_name: kiora_reports_service
     restart: unless-stopped
     networks:
@@ -435,9 +475,10 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       DB_NAME: kiora_reports
-      DATABASE_URL: 
-        postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no esta definido}@reports-db:5432/kiora_reports
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no
+        esta definido}@reports-db:5432/kiora_reports
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
       REDIS_PORT: 6379
       ORDERS_SERVICE_URL: http://orders-service:3004
       TZ: ${TZ:-America/Bogota}
@@ -447,15 +488,22 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3006/api/reports/health"]
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:3006/health
       interval: 15s
       timeout: 5s
       retries: 5
-
   stores-service:
     build:
       context: ./services/stores-service
       dockerfile: Dockerfile
+      additional_contexts:
+      - shared=./services/shared
     container_name: kiora_stores_service
     restart: unless-stopped
     networks:
@@ -468,26 +516,32 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD no esta definido}
       DB_NAME: kiora_stores
-      DATABASE_URL: 
-        postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no esta definido}@stores-db:5432/kiora_stores
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD no
+        esta definido}@stores-db:5432/kiora_stores
       OTEL_SERVICE_NAME: stores-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       TZ: ${TZ:-America/Bogota}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     depends_on:
       stores-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3009/api/stores/health"]
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:3009/health
       interval: 15s
       timeout: 5s
       retries: 5
-
   telegram-bot:
     build:
       context: ./services/telegram-bot
       dockerfile: Dockerfile
       additional_contexts:
-        - shared=./services/shared
+      - shared=./services/shared
     container_name: kiora_telegram_bot
     restart: unless-stopped
     networks:
@@ -496,13 +550,13 @@ services:
     - ./services/telegram-bot/.env.docker
     environment:
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
       REDIS_PORT: 6379
       API_GATEWAY_URL: http://api-gateway:3000/api
       TZ: ${TZ:-America/Bogota}
     depends_on:
       redis:
         condition: service_healthy
-
   ai-service:
     build:
       context: ./services/ai-service
@@ -516,16 +570,20 @@ services:
     environment:
       API_GATEWAY_URL: http://api-gateway:3000/api
       TZ: ${TZ:-America/Bogota}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3008/health"]
+      test:
+      - CMD-SHELL
+      - python -c 'import urllib.request; urllib.request.urlopen("http://localhost:3008/health")'
       interval: 15s
       timeout: 5s
       retries: 5
-
   activity-service:
     build:
       context: ./services/activity-service
       dockerfile: Dockerfile
+      additional_contexts:
+      - shared=./services/shared
     container_name: kiora_activity_service
     restart: unless-stopped
     networks:
@@ -536,19 +594,27 @@ services:
       DB_HOST: activity-db
       DB_PORT: 5432
       TZ: ${TZ:-America/Bogota}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     depends_on:
       activity-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3007/api/activity/health"]
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:3007/health
       interval: 15s
       timeout: 5s
       retries: 5
-
   siesa-integration-service:
     build:
       context: ./services/siesa-integration-service
       dockerfile: Dockerfile
+      additional_contexts:
+      - shared=./services/shared
     container_name: kiora_siesa_integration
     restart: unless-stopped
     networks:
@@ -557,40 +623,45 @@ services:
     - ./services/siesa-integration-service/.env.docker
     environment:
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
       REDIS_PORT: 6379
       TZ: ${TZ:-America/Bogota}
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3010/health"]
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:3010/health
       interval: 15s
       timeout: 5s
       retries: 5
-
   jaeger:
     image: jaegertracing/all-in-one:1.58
     container_name: kiora_jaeger
     restart: unless-stopped
     ports:
-      - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
+    - 16686:16686
+    - 4317:4317
+    - 4318:4318
     networks:
     - kiora-backend-net
-
 networks:
   kiora-backend-net:
     name: kiora-backend-net
     driver: bridge
-
 volumes:
-  users_db_data:
-  products_db_data:
-  products_uploads:
-  inventory_db_data:
-  orders_db_data:
-  notifications_db_data:
-  activity_db_data:
-  stores_db_data:
-  redis_data:
+  users_db_data: null
+  products_db_data: null
+  products_uploads: null
+  inventory_db_data: null
+  orders_db_data: null
+  notifications_db_data: null
+  activity_db_data: null
+  reports_db_data: null
+  stores_db_data: null
+  redis_data: null

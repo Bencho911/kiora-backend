@@ -2,7 +2,7 @@
 
 import * as factusService from '../services/factusService.js';
 import env from '../config/env.js';
-import logger from '../config/logger.js';
+import { logger } from '@kiora/shared';
 
 /**
  * electronicInvoiceController

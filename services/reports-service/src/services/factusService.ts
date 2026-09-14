@@ -1,6 +1,6 @@
 'use strict';
 
-import logger from '../config/logger.js';
+import { logger } from '@kiora/shared';
 import env from '../config/env.js';
 import crypto from 'crypto';
 

@@ -1,12 +1,20 @@
-FROM node:20-alpine
-
-# Opcional: Instalar fuentes base en Alpine para mejor soporte de PDFKit
-RUN apk add --no-cache ttf-dejavu fontconfig
-
+FROM node:20-alpine AS base
 WORKDIR /app
+COPY --from=shared . /shared
 COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
+RUN npm install --omit=dev
 
+FROM node:20-alpine
+RUN apk add --no-cache ttf-dejavu fontconfig
+WORKDIR /app
+COPY --from=shared . /shared
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+COPY --from=base /app/node_modules ./node_modules
+COPY package*.json ./
+COPY tsconfig.json ./
+COPY src ./src
+RUN ln -s /app/node_modules /node_modules && npm install --include=dev && npm run build && npm install --omit=dev
+RUN chown -R appuser:appgroup /app
+USER appuser
 EXPOSE 3006
-CMD ["npm", "start"]
+CMD ["npm", "run", "start"]

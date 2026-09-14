@@ -26,6 +26,9 @@ if (process.env.REDIS_PASSWORD) {
   redisOptions.password = process.env.REDIS_PASSWORD;
 }
 
+// BullMQ requires maxRetriesPerRequest to be null for blocking commands
+redisOptions.maxRetriesPerRequest = null;
+
 const connection = new Redis(redisOptions);
 
 connection.on('error', (err: Error) => {

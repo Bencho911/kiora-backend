@@ -2,7 +2,7 @@
 
 import express from 'express';
 import helmet from 'helmet';
-import logger from './config/logger.js';
+import { logger } from '@kiora/shared';
 import env from './config/env.js';
 
 const app = express();
@@ -11,7 +11,7 @@ app.use(helmet());
 app.use(express.json());
 
 // ── Correlation ID (AsyncLocalStorage) — DEBE IR ANTES de cualquier ruta ──
-import correlationMiddleware from './middlewares/correlationMiddleware.js';
+import { correlationMiddleware } from '@kiora/shared';
 app.use(correlationMiddleware);
 
 // ── Rutas ─────────────────────────────────────────────────────────────────

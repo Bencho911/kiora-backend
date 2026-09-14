@@ -29,6 +29,9 @@ app.use(express.json());
 
 app.use(correlationMiddleware);
 
+app.get('/health', (_req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok', service: 'users-service' });
+});
 app.get('/api/users/health', (req: Request, res: Response) => {
     res.status(200).json({ status: 'OK', message: 'Users Service Kiora está corriendo' });
 });

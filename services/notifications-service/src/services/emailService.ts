@@ -1,7 +1,7 @@
 'use strict';
 
 import nodemailer from 'nodemailer';
-import logger from '../config/logger.js';
+import { logger } from '@kiora/shared';
 
 let transporter = null;
 
