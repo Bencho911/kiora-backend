@@ -9,9 +9,10 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
         const page   = Math.max(1, parseInt((req.query.page as string) || '1', 10));
         const limit  = Math.min(100, Math.max(1, parseInt((req.query.limit as string) || '20', 10)));
         const offset = (page - 1) * limit;
+        const date = req.query.date as string;
 
         const [rows, count] = await Promise.all([
-            invoiceRepository.findAll({ limit, offset }),
+            invoiceRepository.findAll({ limit, offset, date }),
             invoiceRepository.countAll(),
         ]);
         res.status(200).json({

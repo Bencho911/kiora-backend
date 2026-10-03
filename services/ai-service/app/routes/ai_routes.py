@@ -163,6 +163,50 @@ async def telegram_webhook(payload: dict = Body(...)):
         logger.error(f"[AI Webhook] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ── WhatsApp Webhook ────────────────────────────────────────────────────
+from app.services.whatsapp_service import (
+    save_whatsapp_history,
+    get_whatsapp_history,
+    send_whatsapp_response,
+)
+
+@router.post("/whatsapp-webhook")
+async def whatsapp_webhook(payload: dict = Body(...)):
+    """
+    Recibe el mensaje de texto del whatsapp-bot, lo procesa con la IA
+    y envía la respuesta de vuelta al bot vía Redis stream.
+    """
+    text = payload.get("text")
+    jid  = payload.get("jid")
+
+    if not text or not jid:
+        raise HTTPException(status_code=400, detail="Missing text or jid")
+
+    try:
+        await save_whatsapp_history(jid, "user", text)
+        history = await get_whatsapp_history(jid)
+
+        try:
+            context_data = await build_system_context()
+        except Exception:
+            context_data = None
+
+        system_prompt = build_system_prompt(context_data)
+        system_msg = {"role": "system", "content": system_prompt}
+
+        messages = [system_msg] + history
+        result = await chat_with_tools(messages)
+
+        await save_whatsapp_history(jid, "assistant", result["response"])
+        # Devuelve la respuesta al bot de WhatsApp a través de Redis
+        await send_whatsapp_response(jid, result["response"])
+
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"[AI WhatsApp Webhook] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/close-business")
 async def close_business():
     try:

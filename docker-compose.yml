@@ -552,8 +552,31 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
       REDIS_PORT: 6379
-      API_GATEWAY_URL: http://api-gateway:3000/api
+      API_GATEWAY_URL: http://api-gateway:3000/api/v1
       TZ: ${TZ:-America/Bogota}
+    depends_on:
+      redis:
+        condition: service_healthy
+  whatsapp-bot:
+    build:
+      context: ./services/whatsapp-bot
+      dockerfile: Dockerfile
+      additional_contexts:
+      - shared=./services/shared
+    container_name: kiora_whatsapp_bot
+    restart: unless-stopped
+    networks:
+    - kiora-backend-net
+    env_file:
+    - ./services/whatsapp-bot/.env.docker
+    environment:
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
+      REDIS_PORT: 6379
+      API_GATEWAY_URL: http://api-gateway:3000/api/v1
+      TZ: ${TZ:-America/Bogota}
+    volumes:
+    - whatsapp_session:/app/session
     depends_on:
       redis:
         condition: service_healthy
@@ -568,7 +591,7 @@ services:
     env_file:
     - ./services/ai-service/.env.docker
     environment:
-      API_GATEWAY_URL: http://api-gateway:3000/api
+      API_GATEWAY_URL: http://api-gateway:3000/api/v1
       TZ: ${TZ:-America/Bogota}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-rootpassword}
     healthcheck:
@@ -665,3 +688,4 @@ volumes:
   reports_db_data: null
   stores_db_data: null
   redis_data: null
+  whatsapp_session: null

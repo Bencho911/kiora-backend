@@ -10,6 +10,14 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 MAX_TOOL_ROUNDS = 5
 
+# Errores de DeepSeek que indican cuota agotada o API caída → activar fallback Gemini
+_QUOTA_ERRORS = ("insufficient balance", "insufficient_balance", "quota_exceeded", "rate_limit", "429", "402", "connection error")
+
+def _is_quota_error(e: Exception) -> bool:
+    """Devuelve True si el error es por créditos/cuota agotada en DeepSeek."""
+    msg = str(e).lower()
+    return any(k in msg for k in _QUOTA_ERRORS) or getattr(e, 'status_code', None) == 429
+
 client = AsyncOpenAI(
     api_key=DEEPSEEK_API_KEY,
     base_url="https://api.deepseek.com/v1"
@@ -32,6 +40,10 @@ async def chat_with_tools(messages: list) -> dict:
                 stream=False
             )
         except Exception as e:
+            if _is_quota_error(e):
+                logger.warning(f"[DeepSeek] Cuota agotada, usando Gemini como fallback. Error: {e}")
+                from app.services.gemini_service import chat_with_tools as gemini_chat
+                return await gemini_chat(messages)
             logger.error(f"[DeepSeek] API Error: {e}")
             raise
 
@@ -116,14 +128,27 @@ async def stream_chat_with_tools(messages: list):
     while rounds < MAX_TOOL_ROUNDS:
         rounds += 1
         
-        response_stream = await client.chat.completions.create(
-            model=DEEPSEEK_MODEL,
-            messages=current_messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            max_tokens=4096,
-            stream=True
-        )
+        try:
+            response_stream = await client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=current_messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                max_tokens=4096,
+                stream=True
+            )
+        except Exception as e:
+            if _is_quota_error(e):
+                logger.warning(f"[DeepSeek] Cuota agotada en streaming, usando Gemini. Error: {e}")
+                from app.services.gemini_service import stream_chat_with_tools as gemini_stream
+                async for chunk in gemini_stream(messages):
+                    yield chunk
+                return
+            logger.error(f"[DeepSeek] Streaming error: {e}")
+            yield f"data: {json.dumps({'content': f'❌ Error de DeepSeek: {str(e)}'})}\
+\n"
+            yield "data: [DONE]\n\n"
+            return
         
         tool_calls_accumulator = {}
         content_yielded = False

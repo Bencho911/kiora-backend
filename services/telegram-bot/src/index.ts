@@ -195,7 +195,7 @@ bot.on('text', async (ctx) => {
         logger.info('Enviando mensaje a AI webhook', { textLength: text.length });
 
         // Enviar al webhook de AI Service
-        await apiPost('/ai/telegram-webhook', {
+        await apiPost('/v1/ai/telegram-webhook', {
             chatId: String(ctx.chat.id),
             text: text
         });

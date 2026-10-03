@@ -5,15 +5,18 @@ import db from '../config/db';
  * Responsabilidad única: acceso a datos de Factura.
  */
 
-export const findAll = ({ limit = 20, offset = 0 } = {}) =>
-    db.query(
-        `SELECT f.*, v.fecha_vent, v.estado
+export const findAll = ({ limit = 20, offset = 0, date = null }: any = {}) => {
+    let query = `SELECT f.*, v.fecha_vent, v.estado
          FROM factura f
-         JOIN venta v ON v.id_vent = f.fk_id_vent
-         ORDER BY f.emitida_en DESC
-         LIMIT $1 OFFSET $2`,
-        [limit, offset]
-    );
+         JOIN venta v ON v.id_vent = f.fk_id_vent`;
+    let params: any[] = [limit, offset];
+    if (date) {
+        query += ` WHERE DATE(f.emitida_en) = $3`;
+        params.push(date);
+    }
+    query += ` ORDER BY f.emitida_en DESC LIMIT $1 OFFSET $2`;
+    return db.query(query, params);
+};
 
 export const countAll = () => db.query('SELECT COUNT(*) FROM factura');
 

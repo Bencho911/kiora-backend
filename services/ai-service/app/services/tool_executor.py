@@ -264,6 +264,20 @@ TOOLS = [
                 "required": ["cod_prod", "tipo_mov", "cantidad", "desc_mov"],
             },
         },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_invoices",
+            "description": "Obtener facturas recientes, opcionalmente filtradas por fecha. Devuelve los datos y el enlace al PDF.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "Fecha en formato YYYY-MM-DD (opcional)"},
+                    "limit": {"type": "number", "description": "Cantidad de facturas a retornar (default 5)"}
+                }
+            }
+        }
     }
 ]
 
@@ -500,6 +514,29 @@ async def execute_tool(name: str, args: dict):
         return await fetch_json(f"{GATEWAY}/inventory/movements", method="POST", body=payload)
 
 
+
+    elif name == "get_invoices":
+        limit = args.get("limit", 5)
+        date = args.get("date")
+        
+        url = f"{GATEWAY}/invoices?limit={limit}"
+        if date:
+            url += f"&date={date}"
+            
+        data = await fetch_json(url)
+        if isinstance(data, dict) and "data" in data:
+            # Añadir enlace PDF a cada factura
+            # Usar una ruta relativa/absoluta según el cliente; asumiendo que el bot enviará un link markdown
+            # Usa localhost:3000 para que el usuario pueda abrirlo desde su PC.
+            # Si el usuario accede desde el celular conectado a la misma red, debe usar la IP del PC en vez de localhost.
+            domain = "http://localhost:3000"
+            for inv in data["data"]:
+                if inv.get("factus_public_url"):
+                    inv["pdf_url"] = inv["factus_public_url"]
+                else:
+                    inv["pdf_url"] = f"{domain}/api/v1/reports/receipt/{inv.get('fk_id_vent')}"
+            return data["data"]
+        return data
 
     else:
         return {"error": f"Tool desconocida: {name}"}

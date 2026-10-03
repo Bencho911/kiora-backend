@@ -209,6 +209,18 @@ export async function createInvoice(order: any, items: any[], customer: any = nu
         tribute_id: 21,                  // No aplica (ZZ)
     };
 
+    const factusItems = items.map(buildFactusItem);
+    
+    // Calcular el total esperado por Factus para evitar descuadres de 1 centavo
+    let expectedTotal = 0;
+    for (const item of factusItems) {
+        const rate = item.is_excluded === 1 ? 0 : Number(item.taxes[0].rate) / 100;
+        const lineBase = item.price * item.quantity;
+        const lineTax = Math.round(lineBase * rate * 100) / 100;
+        expectedTotal += lineBase + lineTax;
+    }
+    const paymentAmount = Math.round(expectedTotal * 100) / 100;
+
     const body = {
         numbering_range_id: NUMBERING_RANGE,
         reference_code: referenceCode,
@@ -216,14 +228,11 @@ export async function createInvoice(order: any, items: any[], customer: any = nu
         payment_details: [{
             payment_form: 1,  // Pago de contado
             payment_method_code: mapPaymentMethodCode(order.metodopago_usu),
-            // El monto del pago debe coincidir con el total que Factus calcula internamente.
-            // Como buildFactusItem descuenta el IVA del precio_unit antes de enviarlo,
-            // Factus recalcula base + IVA y el total final vuelve a ser montofinal_vent.
-            amount: Number(order.montofinal_vent),
+            amount: paymentAmount,
             payment_due_date: today,
         }],
         customer: customerData,
-        items: items.map(buildFactusItem),
+        items: factusItems,
     };
 
     logger.info('Factus: emitiendo factura electrónica', {
@@ -267,6 +276,18 @@ export async function createCreditNote(billNumber: string, order: any, items: an
     const today = new Date().toISOString().split('T')[0];
     const referenceCode = `KIORA-NC-${order.id_vent}`;
 
+    const factusItems = items.map(buildFactusItem);
+    
+    // Calcular el total esperado por Factus para evitar descuadres de 1 centavo
+    let expectedTotal = 0;
+    for (const item of factusItems) {
+        const rate = item.is_excluded === 1 ? 0 : Number(item.taxes[0].rate) / 100;
+        const lineBase = item.price * item.quantity;
+        const lineTax = Math.round(lineBase * rate * 100) / 100;
+        expectedTotal += lineBase + lineTax;
+    }
+    const paymentAmount = Math.round(expectedTotal * 100) / 100;
+
     const body = {
         numbering_range_id: NC_RANGE_ID,
         reference_code: referenceCode,
@@ -276,7 +297,7 @@ export async function createCreditNote(billNumber: string, order: any, items: an
         payment_details: [{
             payment_form: 1,
             payment_method_code: mapPaymentMethodCode(order.metodopago_usu),
-            amount: Number(order.montofinal_vent),
+            amount: paymentAmount,
             payment_due_date: today,
         }],
         customer: {
@@ -287,7 +308,7 @@ export async function createCreditNote(billNumber: string, order: any, items: an
             legal_organization_id: 2,
             tribute_id: 21,
         },
-        items: items.map(buildFactusItem),
+        items: factusItems,
     };
 
     logger.info('Factus: emitiendo nota crédito', {
